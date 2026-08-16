@@ -23,7 +23,7 @@ import (
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/metainfogen"
 	"github.com/uber/kraken/lib/observability"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/tiered"
 	"github.com/uber/kraken/utils/dedup"
 	"github.com/uber/kraken/utils/log"
 
@@ -52,7 +52,7 @@ type Refresher struct {
 	config            Config
 	stats             tally.Scope
 	requests          *dedup.RequestCache
-	cas               *store.CAStore
+	store             *tiered.Store
 	backends          *backend.Manager
 	metaInfoGenerator *metainfogen.Generator
 }
@@ -61,7 +61,7 @@ type Refresher struct {
 func New(
 	config Config,
 	stats tally.Scope,
-	cas *store.CAStore,
+	store *tiered.Store,
 	backends *backend.Manager,
 	metaInfoGenerator *metainfogen.Generator) *Refresher {
 
@@ -75,7 +75,7 @@ func New(
 	requests := dedup.NewRequestCache(dedup.RequestCacheConfig{}, clock.New(), requestsStats)
 	requests.SetNotFound(func(err error) bool { return err == backenderrors.ErrBlobNotFound })
 
-	return &Refresher{config, stats, requests, cas, backends, metaInfoGenerator}
+	return &Refresher{config, stats, requests, store, backends, metaInfoGenerator}
 }
 
 // Refresh kicks off a background goroutine to download the blob for d from the
@@ -138,7 +138,23 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 
 func (r *Refresher) download(client backend.Client, namespace string, d core.Digest, size uint64, pieceLength int64) error {
 	name := d.Hex()
-	return r.cas.WriteBlobToCacheWithMetaInfo(name, size, func(w store.FileReadWriter) error {
-		return client.Download(namespace, name, w)
-	}, pieceLength)
+	f, err := r.store.Create(d.Hex(), size)
+	if err != nil {
+		return fmt.Errorf("store create: %w", err)
+	}
+	err = client.Download(namespace, name, f)
+	if err != nil {
+		return fmt.Errorf("store create: %w", err)
+	}
+	err = r.store.MarkComplete(d.Hex())
+	if err != nil {
+		return fmt.Errorf("store create: %w", err)
+	}
+
+	err = r.metaInfoGenerator.Generate(d)
+	if err != nil {
+		return fmt.Errorf("generate and store metainfo: %w", err)
+	}
+
+	return nil
 }

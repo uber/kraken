@@ -24,11 +24,10 @@ import (
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 	mockpersistedretry "github.com/uber/kraken/mocks/lib/persistedretry"
 	"github.com/uber/kraken/utils/mockutil"
-	"github.com/uber/kraken/utils/testutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -38,41 +37,33 @@ const _testNamespace = ".*"
 
 type storeMocks struct {
 	ctrl             *gomock.Controller
-	ss               *store.SimpleStore
+	store            *disk.Store
 	backends         *backend.Manager
 	backendClient    *mockbackend.MockClient
 	writeBackManager *mockpersistedretry.MockManager
 }
 
-func newStoreMocks(t *testing.T) (*storeMocks, func()) {
-	var cleanup testutil.Cleanup
-	defer cleanup.Recover()
-
+func newStoreMocks(t *testing.T) *storeMocks {
 	ctrl := gomock.NewController(t)
-	cleanup.Add(ctrl.Finish)
 
-	ss, c := store.SimpleStoreFixture()
-	cleanup.Add(c)
-
+	diskStore := disk.Fixture(t)
 	backends := backend.ManagerFixture()
 	backendClient := mockbackend.NewMockClient(ctrl)
 	require.NoError(t, backends.Register(_testNamespace, backendClient, false))
 
 	writeBackManager := mockpersistedretry.NewMockManager(ctrl)
 
-	return &storeMocks{ctrl, ss, backends, backendClient, writeBackManager}, cleanup.Run
+	return &storeMocks{ctrl, diskStore, backends, backendClient, writeBackManager}
 }
 
 func (m *storeMocks) new(config Config) Store {
-	return New(config, m.ss, m.backends, m.writeBackManager)
+	return New(config, m.store, m.backends, m.writeBackManager)
 }
 
 func TestPutAndGetFromDisk(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newStoreMocks(t)
-	defer cleanup()
-
+	mocks := newStoreMocks(t)
 	store := mocks.new(Config{})
 
 	tag := core.TagFixture()
@@ -91,8 +82,7 @@ func TestPutAndGetFromDisk(t *testing.T) {
 func TestPutAndGetFromDiskWriteThrough(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newStoreMocks(t)
-	defer cleanup()
+	mocks := newStoreMocks(t)
 
 	store := mocks.new(Config{WriteThrough: true})
 
@@ -112,8 +102,7 @@ func TestPutAndGetFromDiskWriteThrough(t *testing.T) {
 func TestGetFromBackendNotFound(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newStoreMocks(t)
-	defer cleanup()
+	mocks := newStoreMocks(t)
 
 	store := mocks.new(Config{})
 
@@ -131,8 +120,7 @@ func TestGetFromBackendNotFound(t *testing.T) {
 func TestGetFromBackendUnkownError(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newStoreMocks(t)
-	defer cleanup()
+	mocks := newStoreMocks(t)
 
 	store := mocks.new(Config{})
 
@@ -149,8 +137,7 @@ func TestGetFromBackendUnkownError(t *testing.T) {
 func TestGetFromBackendInvalidValue(t *testing.T) {
 	require := require.New(t)
 
-	mocks, cleanup := newStoreMocks(t)
-	defer cleanup()
+	mocks := newStoreMocks(t)
 
 	store := mocks.new(Config{})
 

@@ -20,38 +20,42 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/blobrefresh"
-	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/tiered"
 	"github.com/uber/kraken/lib/torrent/storage"
 
 	"github.com/willf/bitset"
 )
 
 // TorrentArchive is a TorrentArchive for origin peers. It assumes that
-// all files (including metainfo) are already downloaded and in the cache directory.
+// all files (including metainfo) are already downloaded.
 type TorrentArchive struct {
-	cas           *store.CAStore
+	store         *tiered.Store
 	blobRefresher *blobrefresh.Refresher
 }
 
 // NewTorrentArchive creates a new TorrentArchive.
 func NewTorrentArchive(
-	cas *store.CAStore, blobRefresher *blobrefresh.Refresher) *TorrentArchive {
+	store *tiered.Store, blobRefresher *blobrefresh.Refresher) *TorrentArchive {
 
-	return &TorrentArchive{cas, blobRefresher}
+	return &TorrentArchive{store.ScopeComplete(), blobRefresher}
 }
 
 func (a *TorrentArchive) getMetaInfo(namespace string, d core.Digest) (*core.MetaInfo, error) {
 	var tm metadata.TorrentMeta
-	if err := a.cas.GetCacheFileMetadata(d.Hex(), &tm); err != nil {
-		if os.IsNotExist(err) {
-			refreshErr := a.blobRefresher.Refresh(namespace, d)
-			if refreshErr != nil {
-				return nil, fmt.Errorf("blob refresh: %s", refreshErr)
-			}
-			return nil, errors.New("refreshing blob")
-		}
+	ok, err := a.store.GetMetadata(d.Hex(), &tm)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		refreshErr := a.blobRefresher.Refresh(namespace, d)
+		if refreshErr != nil {
+			return nil, fmt.Errorf("blob refresh: %s", refreshErr)
+		}
+		return nil, errors.New("refreshing blob")
+	}
+	if !ok {
+		return nil, errors.New("blob is in store, but not its metainfo")
 	}
 	return tm.MetaInfo, nil
 }
@@ -81,7 +85,7 @@ func (a *TorrentArchive) GetTorrent(namespace string, d core.Digest) (storage.To
 	if err != nil {
 		return nil, err
 	}
-	t, err := NewTorrent(a.cas, mi)
+	t, err := NewTorrent(a.store, mi)
 	if err != nil {
 		return nil, fmt.Errorf("initialize torrent: %s", err)
 	}
@@ -90,7 +94,7 @@ func (a *TorrentArchive) GetTorrent(namespace string, d core.Digest) (storage.To
 
 // DeleteTorrent moves a torrent to the trash.
 func (a *TorrentArchive) DeleteTorrent(d core.Digest) error {
-	if err := a.cas.DeleteCacheFile(d.Hex()); err != nil && !os.IsNotExist(err) {
+	if err := a.store.Delete(d.Hex()); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil

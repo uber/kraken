@@ -17,43 +17,43 @@ import (
 	"fmt"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/tiered"
 )
 
 // Generator wraps static piece length configuration in order to determinstically
 // generate metainfo.
 type Generator struct {
 	pieceLengthConfig *pieceLengthConfig
-	cas               *store.CAStore
+	store             *tiered.Store
 }
 
 // New creates a new Generator.
-func New(config Config, cas *store.CAStore) (*Generator, error) {
+func New(config Config, store *tiered.Store) (*Generator, error) {
 	plConfig, err := newPieceLengthConfig(config.PieceLengths)
 	if err != nil {
 		return nil, fmt.Errorf("piece length config: %s", err)
 	}
-	return &Generator{plConfig, cas}, nil
+	return &Generator{plConfig, store.ScopeComplete()}, nil
 }
 
-// Generate generates metainfo for the blob of d and writes it to disk.
+// Generate generates metainfo for the blob of d and writes it to store.
 func (g *Generator) Generate(d core.Digest) error {
-	info, err := g.cas.GetCacheFileStat(d.Hex())
+	size, err := g.store.Stat(d.Hex())
 	if err != nil {
-		return fmt.Errorf("cache stat: %s", err)
+		return fmt.Errorf("stat blob: %s", err)
 	}
-	f, err := g.cas.GetCacheFileReader(d.Hex())
+	f, err := g.store.Open(d.Hex())
 	if err != nil {
-		return fmt.Errorf("get cache file: %s", err)
+		return fmt.Errorf("open blob: %s", err)
 	}
-	pieceLength := g.pieceLengthConfig.get(info.Size())
+	pieceLength := g.pieceLengthConfig.get(size)
 	mi, err := core.NewMetaInfo(d, f, pieceLength)
 	if err != nil {
 		return fmt.Errorf("create metainfo: %s", err)
 	}
-	if _, err := g.cas.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
-		return fmt.Errorf("set metainfo: %s", err)
+	if err := g.store.SetMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
+		return fmt.Errorf("set blob metadata: %s", err)
 	}
 	return nil
 }

@@ -25,7 +25,7 @@ import (
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/blobrefresh"
 	"github.com/uber/kraken/lib/metainfogen"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/tiered"
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/testutil"
@@ -34,7 +34,7 @@ import (
 const pieceLength = 4
 
 type archiveMocks struct {
-	cas           *store.CAStore
+	store         *tiered.Store
 	backendClient *mockbackend.MockClient
 	blobRefresher *blobrefresh.Refresher
 }
@@ -43,8 +43,7 @@ func newArchiveMocks(t *testing.T, namespace string) (*archiveMocks, func()) {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
-	cas, c := store.CAStoreFixture()
-	cleanup.Add(c)
+	tieredStore, _ := tiered.StoreFixture(t)
 
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
@@ -54,13 +53,13 @@ func newArchiveMocks(t *testing.T, namespace string) (*archiveMocks, func()) {
 	require.NoError(t, backends.Register(namespace, backendClient, false))
 
 	blobRefresher := blobrefresh.New(
-		blobrefresh.Config{}, tally.NoopScope, cas, backends, metainfogen.Fixture(cas, pieceLength))
+		blobrefresh.Config{}, tally.NoopScope, tieredStore, backends, metainfogen.Fixture(tieredStore, pieceLength))
 
-	return &archiveMocks{cas, backendClient, blobRefresher}, cleanup.Run
+	return &archiveMocks{tieredStore, backendClient, blobRefresher}, cleanup.Run
 }
 
 func (m *archiveMocks) new() *TorrentArchive {
-	return NewTorrentArchive(m.cas, m.blobRefresher)
+	return NewTorrentArchive(m.store, m.blobRefresher)
 }
 
 func TestTorrentArchiveStatNoExistTriggersRefresh(t *testing.T) {
@@ -139,6 +138,6 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 
 	require.NoError(archive.DeleteTorrent(blob.Digest))
 
-	_, err := mocks.cas.GetCacheFileStat(blob.Digest.Hex())
+	_, err := mocks.store.Stat(blob.Digest.Hex())
 	require.True(os.IsNotExist(err))
 }
