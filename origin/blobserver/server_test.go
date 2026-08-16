@@ -877,9 +877,9 @@ func TestForceCleanupWriteBackFailures(t *testing.T) {
 
 func newTestDiskStore(t *testing.T) *disk.Store {
 	d, err := disk.NewStore(&disk.Config{
-		CapacityBytes: 100,
-		RootDir:       t.TempDir(),
-		ShardLength:   2,
+		Capacity:    100,
+		RootDir:     t.TempDir(),
+		ShardLength: 2,
 	}, tally.NoopScope)
 	require.NoError(t, err)
 	return d

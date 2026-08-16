@@ -46,9 +46,10 @@ func NewStore(config *Config, stats tally.Scope) (*Store, error) {
 
 // Create adds a new, incomplete blob to the store and reserves space for it.
 // Incomplete entries cannot be automatically evicted. MarkComplete must be called once the blob is complete.
-// The store uses `sizeBytes` for its eviction logic even if the blob's real size differs.
-func (s *Store) Create(key string, sizeBytes uint64) (*File, error) {
-	return s.impl.Create(key, sizeBytes)
+// The store uses `size` for its eviction logic and NOT the blob's actual size.
+// Thus the store supports both weighted and unweighted eviction.
+func (s *Store) Create(key string, size uint64) (*File, error) {
+	return s.impl.Create(key, size)
 }
 
 // Open returns an FD to a file in the store. [os.ErrNotExist] is returned on missing entry.
