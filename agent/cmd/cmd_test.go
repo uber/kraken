@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"flag"
-	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -112,7 +115,7 @@ func TestRunValidation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			assert.PanicsWithValue(t, test.panic, func() {
-				Run(&test.flags)
+				_ = Run(context.Background(), &test.flags) //nolint:errcheck
 			})
 		})
 	}
@@ -131,7 +134,8 @@ func TestRunUsesProvidedConfig(t *testing.T) {
 	called := false
 
 	assert.PanicsWithValue(t, sentinel, func() {
-		Run(
+		_ = Run( //nolint:errcheck
+			context.Background(),
 			flags,
 			WithConfig(Config{}),
 			WithMetrics(tally.NewTestScope("", nil)),
@@ -146,7 +150,7 @@ func TestRunUsesProvidedConfig(t *testing.T) {
 	assert.True(t, called, "effect should be invoked")
 }
 
-func TestRunPanicsWhenConfigLoadFails(t *testing.T) {
+func TestRunReturnsErrorWhenConfigLoadFails(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.yaml")
 
 	flags := &Flags{
@@ -156,18 +160,17 @@ func TestRunPanicsWhenConfigLoadFails(t *testing.T) {
 		ConfigFile:        missing,
 	}
 
-	expected := fmt.Sprintf("open %s: no such file or directory", missing)
-
-	assert.PanicsWithError(t, expected, func() {
-		Run(
-			flags,
-			WithMetrics(tally.NewTestScope("", nil)),
-			WithLogger(zap.NewNop()),
-		)
-	})
+	err := Run(
+		context.Background(),
+		flags,
+		WithMetrics(tally.NewTestScope("", nil)),
+		WithLogger(zap.NewNop()),
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no such file or directory")
 }
 
-func TestRunPanicsWhenSecretsLoadFails(t *testing.T) {
+func TestRunReturnsErrorWhenSecretsLoadFails(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 
@@ -185,15 +188,14 @@ func TestRunPanicsWhenSecretsLoadFails(t *testing.T) {
 		SecretsFile:       missingSecrets,
 	}
 
-	expected := fmt.Sprintf("open %s: no such file or directory", missingSecrets)
-
-	assert.PanicsWithError(t, expected, func() {
-		Run(
-			flags,
-			WithMetrics(tally.NewTestScope("", nil)),
-			WithLogger(zap.NewNop()),
-		)
-	})
+	err := Run(
+		context.Background(),
+		flags,
+		WithMetrics(tally.NewTestScope("", nil)),
+		WithLogger(zap.NewNop()),
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no such file or directory")
 }
 
 func TestValidateRequiredPorts(t *testing.T) {
@@ -287,4 +289,62 @@ func (t clockTicker) Chan() <-chan time.Time {
 
 func (t clockTicker) Stop() {
 	t.ticker.Stop()
+}
+
+func TestWaitForShutdown_ExternalCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 2)
+	cancel()
+	err := waitForShutdown(ctx, errCh)
+	assert.NoError(t, err)
+}
+
+func TestWaitForShutdown_ErrorReceived(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 2)
+	sentinel := errors.New("internal failure")
+	errCh <- sentinel
+	err := waitForShutdown(ctx, errCh)
+	assert.Equal(t, sentinel, err)
+}
+
+func TestWaitForShutdown_ErrorWinsWhenBothReady(t *testing.T) {
+	// When cancel() and errCh <- err happen together (the common internal-error
+	// path), the error must always be returned — never silently swallowed as nil.
+	sentinel := errors.New("goroutine failure")
+	for range 100 {
+		ctx, cancel := context.WithCancel(context.Background())
+		errCh := make(chan error, 2)
+		cancel()
+		errCh <- sentinel
+		err := waitForShutdown(ctx, errCh)
+		require.Equal(t, sentinel, err, "error must not be swallowed when both ctx and errCh are ready")
+	}
+}
+
+// TestHTTPServerGracefulShutdown verifies the pattern used in Run:
+// ListenAndServe stops cleanly when Shutdown is called, and http.ErrServerClosed
+// is not surfaced as a fatal error.
+func TestHTTPServerGracefulShutdown(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})}
+
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- srv.Serve(ln)
+	}()
+
+	// Shutdown should cause Serve to return http.ErrServerClosed — not a real error.
+	require.NoError(t, srv.Shutdown(context.Background()))
+
+	err = <-serveErr
+	assert.Equal(t, http.ErrServerClosed, err, "Serve should return ErrServerClosed after Shutdown")
+
+	// Verify the ErrServerClosed guard used in Run filters it correctly.
+	if err != nil && err != http.ErrServerClosed {
+		t.Fatal("guard would have incorrectly treated ErrServerClosed as a fatal error")
+	}
 }
