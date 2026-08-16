@@ -243,6 +243,50 @@ func TestCAStoreCreateCacheFile(t *testing.T) {
 	require.NoError(err)
 	require.Equal(s1, string(b2))
 }
+
+func TestCAStore_GenerateCacheFileMetaInfo(t *testing.T) {
+	require := require.New(t)
+
+	s, cleanup := CAStoreFixture()
+	defer cleanup()
+
+	const pieceLength = 10
+	blob := core.SizedBlobFixture(100, pieceLength)
+	require.NoError(s.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+
+	require.NoError(s.GenerateCacheFileMetaInfo(blob.Digest, pieceLength))
+
+	var tm metadata.TorrentMeta
+	require.NoError(s.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
+	require.Equal(blob.MetaInfo, tm.MetaInfo)
+}
+
+func TestCAStore_GenerateCacheFileMetaInfo_CacheFileMissing(t *testing.T) {
+	require := require.New(t)
+
+	s, cleanup := CAStoreFixture()
+	defer cleanup()
+
+	err := s.GenerateCacheFileMetaInfo(core.DigestFixture(), 10)
+	require.ErrorContains(err, "get cache file")
+}
+
+func TestCAStore_GenerateCacheFileMetaInfo_InvalidPieceLength(t *testing.T) {
+	require := require.New(t)
+
+	s, cleanup := CAStoreFixture()
+	defer cleanup()
+
+	blob := core.NewBlobFixture()
+	require.NoError(s.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+
+	err := s.GenerateCacheFileMetaInfo(blob.Digest, 0)
+	require.EqualError(err, "create metainfo: piece length must be positive")
+
+	var tm metadata.TorrentMeta
+	require.Error(s.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
+}
+
 func TestCAStoreConfig_WithMemoryCache(t *testing.T) {
 	require := require.New(t)
 
