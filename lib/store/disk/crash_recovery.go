@@ -33,7 +33,7 @@ func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Sc
 		}
 	}
 
-	pather := newPather(config.RootDir, config.ShardLength)
+	pather := newPather(config.RootDir, config.ShardLength, log)
 	keys, err := pather.rebootKeys(_completeBlob)
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Sc
 			return nil, err
 		}
 		if !ok {
-			log.With("key", key).Warn("Could not reboot blob from disk - its parent directory is there but the blob is missing")
+			log.With("key", key).Warn("Could not reboot blob from disk, failing open by skipping it")
 			continue
 		}
 		if b.complete && b.evictable {
