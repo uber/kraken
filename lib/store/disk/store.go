@@ -372,6 +372,39 @@ func (s *store) List(scope storelib.BlobScope) []string {
 	return res
 }
 
+func (s *store) RenameKey(key, newKey string, scope storelib.BlobScope) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return err
+	}
+	if _, ok := s.blobs[newKey]; ok {
+		return os.ErrExist
+	}
+
+	dirName := s.dirPath(key, b.complete)
+	newDirName := s.dirPath(newKey, b.complete)
+	if err := os.MkdirAll(filepath.Dir(newDirName), _defaultFilePerm); err != nil {
+		return fmt.Errorf("mkdirall: %w", err)
+	}
+	err := os.Rename(dirName, newDirName)
+	if err != nil {
+		return fmt.Errorf("os rename: %w", err)
+	}
+
+	delete(s.blobs, key)
+	s.blobs[newKey] = b
+	if b.node != nil {
+		b.node.Value = newKey
+	}
+	return nil
+}
+
 func (s *store) BanEviction(key string, scope storelib.BlobScope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -71,6 +71,10 @@ func (s *Store) Delete(key string) error { return s.impl.Delete(key, s.scope) }
 // List returns the keys of all blobs (except those out of scope).
 func (s *Store) List() []string { return s.impl.List(s.scope) }
 
+// RenameKey changes the key of an already present blob. Needed when the key of the blob is not
+// known before creating the blob (e.g. when getting it uploaded in proxy).
+func (s *Store) RenameKey(key, newKey string) error { return s.impl.RenameKey(key, newKey, s.scope) }
+
 // BanEviction marks a blob as unevictable by LRU eviction. It is idempotent.
 // Needed when e.g. blobs must be written back to GCS/S3 and eviction before that is unacceptable.
 func (s *Store) BanEviction(key string) error { return s.impl.BanEviction(key, s.scope) }
