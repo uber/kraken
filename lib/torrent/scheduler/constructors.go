@@ -20,7 +20,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/blobrefresh"
 	"github.com/uber/kraken/lib/hashring"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/tiered"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
@@ -37,7 +37,7 @@ func NewAgentScheduler(
 	config Config,
 	stats tally.Scope,
 	pctx core.PeerContext,
-	cads *store.CADownloadStore,
+	store *disk.Store,
 	netevents networkevent.Producer,
 	trackers hashring.PassiveRing,
 	announceClient announceclient.Client,
@@ -45,7 +45,7 @@ func NewAgentScheduler(
 
 	s, err := newScheduler(
 		config,
-		agentstorage.NewTorrentArchive(stats, cads, metainfoclient.New(trackers, tls)),
+		agentstorage.NewTorrentArchive(stats, store, metainfoclient.New(trackers, tls)),
 		stats,
 		pctx,
 		announceClient,

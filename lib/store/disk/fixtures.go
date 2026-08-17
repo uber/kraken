@@ -37,3 +37,14 @@ func Fixture(t *testing.T) *Store {
 	require.NoError(t, err)
 	return s
 }
+
+// RunDownload writes content to s under key and marks it complete, for tests
+// that need a complete blob already present in the store.
+func RunDownload(t *testing.T, s *Store, key string, content []byte) {
+	f, err := s.Create(key, uint64(len(content)))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, f.Close()) }()
+	_, err = f.Write(content)
+	require.NoError(t, err)
+	require.NoError(t, s.MarkComplete(key))
+}

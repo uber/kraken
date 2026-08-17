@@ -50,14 +50,12 @@ func (c Config) ReadWriteParameters(
 // ReadOnlyParameters builds parameters for a read-only driver.
 func (c Config) ReadOnlyParameters(
 	transferer transfer.ImageTransferer,
-	bs BlobStore,
 	metrics tally.Scope) configuration.Parameters {
 
 	return configuration.Parameters{
 		"constructor": _ro,
 		"config":      c,
 		"transferer":  transferer,
-		"blobstore":   bs,
 		"metrics":     metrics,
 	}
 }
