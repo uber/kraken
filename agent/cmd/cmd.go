@@ -28,7 +28,7 @@ import (
 	"github.com/uber/kraken/lib/containerruntime"
 	"github.com/uber/kraken/lib/containerruntime/dockerdaemon"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/metrics"
@@ -178,7 +178,7 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
 
-	cads, err := store.NewCADownloadStore(config.CADownloadStore, stats)
+	diskStore, err := disk.NewStore(&config.DiskStore, stats)
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
@@ -202,7 +202,7 @@ func Run(flags *Flags, opts ...Option) {
 
 	announceClient := announceclient.New(pctx, trackers, tls)
 	sched, err := scheduler.NewAgentScheduler(
-		config.Scheduler, stats, pctx, cads, netevents, trackers, announceClient, tls)
+		config.Scheduler, stats, pctx, diskStore, netevents, trackers, announceClient, tls)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
@@ -214,9 +214,9 @@ func Run(flags *Flags, opts ...Option) {
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
 
-	transferer := transfer.NewReadOnlyTransferer(stats, cads, tagClient, sched)
+	transferer := transfer.NewReadOnlyTransferer(stats, diskStore, tagClient, sched)
 
-	registry, err := config.Registry.Build(config.Registry.ReadOnlyParameters(transferer, cads, stats))
+	registry, err := config.Registry.Build(config.Registry.ReadOnlyParameters(transferer, stats))
 	if err != nil {
 		log.Fatalf("Failed to init registry: %s", err)
 	}
@@ -234,7 +234,7 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	agentServer := agentserver.New(
-		config.AgentServer, stats, cads, sched, tagClient, announceClient, containerRuntimeFactory)
+		config.AgentServer, stats, diskStore, sched, tagClient, announceClient, containerRuntimeFactory)
 	addr := fmt.Sprintf(":%d", flags.AgentServerPort)
 	log.Infof("Starting agent server on %s", addr)
 	heartbeatTicker := &timeTicker{inner: time.NewTicker(10 * time.Second)}

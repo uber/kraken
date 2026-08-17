@@ -497,7 +497,7 @@ func TestDownloadAfterCacheEviction(t *testing.T) {
 
 	// Simulate cache cleanup evicting the file from disk while the
 	// scheduler still considers the torrent complete in memory.
-	require.NoError(leecher.cads.Cache().DeleteFile(blob.Digest.Hex()))
+	require.NoError(leecher.store.ScopeComplete().Delete(blob.Digest.Hex()))
 
 	// A second download for the same blob must succeed by
 	// re-downloading from the seeder.

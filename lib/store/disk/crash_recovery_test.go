@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -238,10 +239,17 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(cF.Close())
 		require.NoError(store.MarkComplete(cKey))
 
+		// The reboot logic approximates LRU order using each blob's mtime, so
+		// c, d, and e need mtimes far enough apart to be distinguishable
+		// regardless of the underlying filesystem's timestamp resolution.
+		time.Sleep(10 * time.Millisecond)
+
 		dF, dKey := newTestFile(t, store, 2*memsize.KB)
 		_ = fillWithRandomData(t, dF, 2*memsize.KB)
 		require.NoError(dF.Close())
 		require.NoError(store.MarkComplete(dKey))
+
+		time.Sleep(10 * time.Millisecond)
 
 		eF, eKey := newTestFile(t, store, 2*memsize.KB)
 		_ = fillWithRandomData(t, eF, 2*memsize.KB)
