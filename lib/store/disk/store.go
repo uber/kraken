@@ -77,7 +77,7 @@ func newStore(config *Config, stats tally.Scope) (*store, error) {
 			blobs:      make(map[string]*blob),
 			evictQueue: list.New(),
 			config:     config,
-			pather:     newPather(config.RootDir, config.ShardLength),
+			pather:     newPather(config.RootDir, config.ShardLength, log),
 			log:        log,
 			stats:      stats,
 		}

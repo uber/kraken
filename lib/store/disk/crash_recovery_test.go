@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,12 +19,9 @@ func TestCrashRecovery(t *testing.T) {
 		for _, shardLength := range []int{0, _defaultShardLength, 4} {
 			require := require.New(t)
 
-			rootDir, err := os.MkdirTemp("/tmp", "kraken-disk-store")
-			require.NoError(err)
-			t.Cleanup(func() { require.NoError(os.RemoveAll(rootDir)) })
 			config := &Config{
 				Capacity:              10 * memsize.KB,
-				RootDir:               rootDir,
+				RootDir:               t.TempDir(),
 				RebootIncompleteBlobs: true,
 				ShardLength:           shardLength,
 			}
@@ -55,7 +51,7 @@ func TestCrashRecovery(t *testing.T) {
 			require.NoError(store.BanEviction(incompleteUnevictableKey))
 
 			// Assume that the application crashes here. The application would restart and call `NewStore`.
-			store, err = NewStore(&Config{10 * memsize.KB, rootDir, true, shardLength}, tally.NoopScope)
+			store, err = NewStore(config, tally.NoopScope)
 			require.NoError(err)
 
 			require.Equal(8*memsize.KB, store.impl.size)
@@ -106,7 +102,7 @@ func TestCrashRecovery(t *testing.T) {
 			require.Equal(8*memsize.KB, store.impl.size)
 
 			// Run the store with `rebootIncompleteBlobs` as false.
-			store, err = NewStore(&Config{10 * memsize.KB, rootDir, false, shardLength}, tally.NoopScope)
+			store, err = NewStore(&Config{10 * memsize.KB, config.RootDir, false, shardLength}, tally.NoopScope)
 			require.NoError(err)
 
 			// Incomplete files are dropped.
@@ -178,6 +174,49 @@ func TestCrashRecovery(t *testing.T) {
 		require.NoError(err)
 		require.True(ok)
 		require.Equal(writtenMd.MetaInfo, readMd.MetaInfo)
+	})
+
+	t.Run("image tags can be keys", func(t *testing.T) {
+		// image tags can have special characters like "/" and :""
+		keys := []string{"test/alpine:latest", "te/st/alpine:latest", "test:alpine:latest"}
+		for _, shardLength := range []int{0, _defaultShardLength} {
+			for _, key := range keys {
+				require := require.New(t)
+
+				config := &Config{
+					Capacity:              10 * memsize.KB,
+					RootDir:               t.TempDir(),
+					RebootIncompleteBlobs: true,
+					ShardLength:           shardLength,
+				}
+
+				store, err := NewStore(config, tally.NoopScope)
+				require.NoError(err)
+
+				f, err := store.Create(key, 2*memsize.KB)
+				require.NoError(err)
+				data := fillWithRandomData(t, f, 2*memsize.KB)
+				require.NoError(f.Close())
+				require.NoError(store.MarkComplete(key))
+				require.NoError(store.BanEviction(key))
+
+				// Assume that the application crashes here. The application would restart and call `NewStore`.
+				store, err = NewStore(config, tally.NoopScope)
+				require.NoError(err)
+
+				_, ok := store.Has(key)
+				require.True(ok)
+
+				f, err = store.ScopeComplete().Open(key)
+				require.NoError(err)
+				defer func() { require.NoError(f.Close()) }()
+				gotData, err := io.ReadAll(f)
+				require.NoError(err)
+				require.Equal(data, gotData)
+
+				require.Equal(2*memsize.KB, store.impl.size)
+			}
+		}
 	})
 
 	t.Run("lru order is approximated and blobs are evicted if store size exceeds capacity", func(t *testing.T) {
