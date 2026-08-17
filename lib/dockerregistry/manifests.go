@@ -118,8 +118,8 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 //   - (false, err) on verification errors or unknown decisions.
 //
 // Logging
-//   - Error on verification error (includes repo/digest).
-//   - Warn  on deny (includes original path).
+//   - Error on verification error.
+//   - Warn  on deny.
 //   - Debug on skip.
 func (t *manifests) verify(
 	path string,
@@ -127,9 +127,10 @@ func (t *manifests) verify(
 	digest core.Digest,
 	blob store.FileReader,
 ) (bool, error) {
+	l := log.With("path", path, "repo", repo, "digest", digest)
 	decision, err := t.verification(repo, digest, blob)
 	if err != nil {
-		log.With("repo", repo, "digest", digest).Errorf("Error while performing image validation %s", err)
+		l.With("error", err).Error("Error while performing image validation")
 		return false, err
 	}
 
@@ -137,10 +138,10 @@ func (t *manifests) verify(
 	case DecisionAllow:
 		return true, nil
 	case DecisionDeny:
-		log.With("repo", repo, "digest", digest).Warnf("Verification failed %s", path)
+		l.Warn("Verification failed")
 		return false, nil
 	case DecisionSkip:
-		log.With("repo", repo, "digest", digest).Debugf("Verification skipped for %s", path)
+		l.Debug("Verification skipped")
 		return true, nil
 	default:
 		return false, fmt.Errorf("unknown verification decision: %d", decision)
