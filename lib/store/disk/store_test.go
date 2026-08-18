@@ -812,6 +812,41 @@ func TestStat(t *testing.T) {
 	})
 }
 
+func TestFile__SizeWorksAfterClose(t *testing.T) {
+	t.Run("after Close", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		f, _ := newTestFile(t, store, 1*memsize.KB)
+		data := fillWithRandomData(t, f, 100)
+
+		require.NoError(f.Close())
+
+		require.Equal(int64(len(data)), f.Size())
+	})
+
+	t.Run("after Commit", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		f, _ := newTestFile(t, store, 1*memsize.KB)
+		data := fillWithRandomData(t, f, 100)
+
+		require.NoError(f.Commit())
+
+		require.Equal(int64(len(data)), f.Size())
+	})
+
+	t.Run("after Cancel", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		f, _ := newTestFile(t, store, 1*memsize.KB)
+		data := fillWithRandomData(t, f, 100)
+
+		require.NoError(f.Cancel())
+
+		require.Equal(int64(len(data)), f.Size())
+	})
+}
+
 func TestList(t *testing.T) {
 	require := require.New(t)
 	store, _ := newTestStore(t, 10*memsize.KB, false)
