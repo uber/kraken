@@ -14,6 +14,7 @@
 package scheduler
 
 import (
+	"errors"
 	"os"
 	"sync"
 	"testing"
@@ -254,7 +255,7 @@ func TestLeecherTTI(t *testing.T) {
 
 	// Idle leecher should delete torrent file to prevent it from being revived.
 	_, err := p.torrentArchive.Stat(namespace, blob.Digest)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func TestMultipleDownloadsForSameTorrentSucceed(t *testing.T) {
@@ -461,7 +462,7 @@ func TestSchedulerRemoveTorrent(t *testing.T) {
 	require.Equal(ErrTorrentRemoved, <-errc)
 
 	_, err := p.torrentArchive.Stat(namespace, blob.Digest)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func TestDownloadAfterCacheEviction(t *testing.T) {

@@ -37,12 +37,12 @@ func newUploader(store *disk.Store) *uploader {
 }
 
 func (u *uploader) start(d core.Digest, size uint64) (uid string, err error) {
-	uid = uuid.Generate().String()
-	f, err := u.store.Create(d.Hex(), size)
-	if errors.Is(err, os.ErrExist) {
+	if _, ok := u.store.Has(d.Hex()); ok {
 		log.With("digest", d.Hex()).Debug("Blob already exists, cannot start new upload")
 		return "", handler.ErrorStatus(http.StatusConflict)
 	}
+	uid = uuid.Generate().String()
+	f, err := u.store.Create(uid, size)
 	if err != nil {
 		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to create file: %s", err)
 		return "", handler.Errorf("create file: %s", err)
@@ -60,8 +60,8 @@ func (u *uploader) patch(
 		log.With("digest", d.Hex(), "uid", uid).Debug("Blob already exists and is complete, cannot patch upload")
 		return handler.ErrorStatus(http.StatusConflict)
 	}
-	f, err := u.store.ScopeIncomplete().Open(d.Hex())
-	if os.IsNotExist(err) {
+	f, err := u.store.ScopeIncomplete().Open(uid)
+	if errors.Is(err, os.ErrNotExist) {
 		log.With("digest", d.Hex(), "uid", uid).Warn("Incomplete file not found")
 		return handler.ErrorStatus(http.StatusNotFound)
 	}
@@ -84,12 +84,16 @@ func (u *uploader) patch(
 }
 
 func (u *uploader) commit(d core.Digest, uid string) error {
-	log.With("digest", d.Hex(), "uid", uid).Debug("Marking file as complete")
-	err := u.store.MarkComplete(d.Hex())
-	if os.IsNotExist(err) {
+	err := u.store.RenameKey(uid, d.Hex())
+	if errors.Is(err, os.ErrNotExist) {
 		log.With("digest", d.Hex(), "uid", uid).Warn("File not found during commit")
 		return handler.ErrorStatus(http.StatusNotFound)
 	}
+	if errors.Is(err, os.ErrExist) {
+		log.With("digest", d.Hex(), "uid", uid).Warn("File is already complete and in store")
+		return handler.ErrorStatus(http.StatusConflict)
+	}
+	err = u.store.MarkComplete(d.Hex())
 	if err != nil {
 		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to mark file as complete: %s", err)
 		return handler.Errorf("mark file as complete: %s", err)

@@ -167,6 +167,9 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 		return err
 	}
 
+	if b.evictionBanned {
+		s.log.With("key", key).Warn("disk.Store clients are deleting a blob that is banned from eviction")
+	}
 	b.sliceMu.Lock()
 	*b.data = nil // Ensure the byte slice is not referenced by clients outside the store holding [*File], so GC can evict the memory.
 	b.sliceMu.Unlock()

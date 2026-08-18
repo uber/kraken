@@ -160,7 +160,7 @@ func (s *tagStore) resolveFromDisk(tag string) (core.Digest, error) {
 
 	f, err := s.fs.Open(tag)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			log.With("tag", tag).Debug("Tag not found in disk cache")
 			return core.Digest{}, ErrTagNotFound
 		}

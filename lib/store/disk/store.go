@@ -343,6 +343,9 @@ func (s *store) deleteNoLock(key string, scope storelib.BlobScope) error {
 	if err := isOutOfScope(b, scope); err != nil {
 		return err
 	}
+	if b.evictionBanned {
+		s.log.With("key", key).Warn("disk.Store clients are deleting a blob that is banned from eviction")
+	}
 	err := s.deleteFromDisk(key, b.complete)
 	if err != nil {
 		return fmt.Errorf("delete from disk: %w", err)

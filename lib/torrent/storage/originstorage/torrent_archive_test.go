@@ -14,6 +14,7 @@
 package originstorage
 
 import (
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -139,5 +140,5 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	require.NoError(archive.DeleteTorrent(blob.Digest))
 
 	_, err := mocks.store.Stat(blob.Digest.Hex())
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }

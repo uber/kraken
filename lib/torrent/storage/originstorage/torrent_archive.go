@@ -94,7 +94,7 @@ func (a *TorrentArchive) GetTorrent(namespace string, d core.Digest) (storage.To
 
 // DeleteTorrent moves a torrent to the trash.
 func (a *TorrentArchive) DeleteTorrent(d core.Digest) error {
-	if err := a.store.Delete(d.Hex()); err != nil && !os.IsNotExist(err) {
+	if err := a.store.Delete(d.Hex()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil

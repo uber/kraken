@@ -149,7 +149,7 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	if err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, store.ErrOutOfScope) {
 		return handler.Errorf("store open: %s", err)
 	}
-	if os.IsNotExist(err) || errors.Is(err, store.ErrOutOfScope) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
 		err := s.sched.Download(namespace, d)
 		if err == scheduler.ErrTorrentNotFound {
 			return handler.ErrorStatus(http.StatusNotFound)
