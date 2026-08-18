@@ -19,7 +19,7 @@ import (
 	"github.com/docker/distribution/registry"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 )
 
 const (
@@ -35,14 +35,14 @@ type Config struct {
 // ReadWriteParameters builds parameters for a read-write driver.
 func (c Config) ReadWriteParameters(
 	transferer transfer.ImageTransferer,
-	cas *store.CAStore,
+	diskStore *disk.Store,
 	metrics tally.Scope) configuration.Parameters {
 
 	return configuration.Parameters{
 		"constructor": _rw,
 		"config":      c,
 		"transferer":  transferer,
-		"castore":     cas,
+		"diskstore":   diskStore,
 		"metrics":     metrics,
 	}
 }
@@ -50,14 +50,12 @@ func (c Config) ReadWriteParameters(
 // ReadOnlyParameters builds parameters for a read-only driver.
 func (c Config) ReadOnlyParameters(
 	transferer transfer.ImageTransferer,
-	bs BlobStore,
 	metrics tally.Scope) configuration.Parameters {
 
 	return configuration.Parameters{
 		"constructor": _ro,
 		"config":      c,
 		"transferer":  transferer,
-		"blobstore":   bs,
 		"metrics":     metrics,
 	}
 }

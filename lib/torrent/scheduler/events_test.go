@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
 	"github.com/uber/kraken/lib/torrent/scheduler/conn"
@@ -88,14 +88,13 @@ func newStateMocks(t *testing.T) (*stateMocks, func()) {
 
 	announceClient := mockannounceclient.NewMockClient(ctrl)
 
-	cads, c := store.CADownloadStoreFixture()
-	cleanup.Add(c)
+	store := disk.Fixture(t)
 
 	mocks := &stateMocks{
 		metainfoClient: metainfoClient,
 		announceClient: announceClient,
 		announceQueue:  announcequeue.New(),
-		torrentArchive: agentstorage.NewTorrentArchive(tally.NoopScope, cads, metainfoClient),
+		torrentArchive: agentstorage.NewTorrentArchive(tally.NoopScope, store, metainfoClient),
 		eventLoop:      &mockEventLoop{t, make(chan event)},
 	}
 	return mocks, cleanup.Run

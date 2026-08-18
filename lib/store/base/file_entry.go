@@ -131,7 +131,7 @@ func (f *localFileEntryFactory) ListNames(state FileState) ([]string, error) {
 	readNames = func(dir string) error {
 		infos, err := os.ReadDir(dir)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, os.ErrNotExist) {
 				return nil
 			}
 			return err
@@ -432,7 +432,7 @@ func (entry *localFileEntry) LinkTo(targetPath string) error {
 func (entry *localFileEntry) Delete() error {
 	var persist metadata.Persist
 	if err := entry.GetMetadata(&persist); err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("get persist metadata: %s", err)
 		}
 	} else {
@@ -590,11 +590,11 @@ func (entry *localFileEntry) RangeMetadata(f func(md metadata.Metadata) error) e
 func compareAndWriteFile(filePath string, b []byte) (bool, error) {
 	// Check existence.
 	fs, err := os.Stat(filePath)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
 
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(filePath), 0775); err != nil {
 			return false, err
 		}

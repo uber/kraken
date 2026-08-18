@@ -14,12 +14,11 @@
 package metainfogen
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/tiered"
 
 	"github.com/c2h5oh/datasize"
 	"github.com/stretchr/testify/require"
@@ -28,8 +27,7 @@ import (
 func TestGenerate(t *testing.T) {
 	require := require.New(t)
 
-	cas, cleanup := store.CAStoreFixture()
-	defer cleanup()
+	tieredStore, _ := tiered.StoreFixture(t)
 
 	pieceLength := 10
 
@@ -37,16 +35,23 @@ func TestGenerate(t *testing.T) {
 		PieceLengths: map[datasize.ByteSize]datasize.ByteSize{
 			0: datasize.ByteSize(pieceLength),
 		},
-	}, cas)
+	}, tieredStore)
 	require.NoError(err)
 
 	blob := core.SizedBlobFixture(100, uint64(pieceLength))
 
-	require.NoError(cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	f, err := tieredStore.Create(blob.Digest.Hex(), uint64(len(blob.Content)))
+	require.NoError(err)
+	_, err = f.Write(blob.Content)
+	require.NoError(err)
+	require.NoError(f.Close())
+	require.NoError(tieredStore.MarkComplete(blob.Digest.Hex()))
 
 	require.NoError(generator.Generate(blob.Digest))
 
 	var tm metadata.TorrentMeta
-	require.NoError(cas.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
+	ok, err := tieredStore.GetMetadata(blob.Digest.Hex(), &tm)
+	require.NoError(err)
+	require.True(ok)
 	require.Equal(blob.MetaInfo, tm.MetaInfo)
 }

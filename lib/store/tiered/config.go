@@ -9,6 +9,7 @@ import (
 
 const _defaultNumFlushWorkers = 10
 
+// Config configures [Store].
 type Config struct {
 	DiskConfig      *disk.Config   `yaml:"disk_store"`
 	MemConfig       *memory.Config `yaml:"memory_store"`

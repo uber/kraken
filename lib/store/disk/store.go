@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
@@ -41,7 +42,10 @@ type store struct {
 	evictQueue *list.List       // Front is the next to evict.
 	// Synchronizes 1) mem state and 2) disk state. Only acquired by public methods.
 	mu     sync.RWMutex // TODO - evaluate whether the read-to-write ratio is more appropriate for a [sync.Mutex] instead.
+	stopCh chan struct{}
+	doneCh chan struct{}
 	config *Config
+	clk    clock.Clock
 	log    *zap.SugaredLogger
 	stats  tally.Scope
 	*pather
@@ -54,13 +58,15 @@ type blob struct {
 	evictionBanned bool
 }
 
-func newStore(config *Config, stats tally.Scope) (*store, error) {
+func newStore(config *Config, stats tally.Scope, clk clock.Clock) (*store, error) {
 	err := config.applyDefaults()
 	if err != nil {
 		return nil, err
 	}
 
 	log := log.Default().With("module", "disk_store")
+	stats = stats.Tagged(map[string]string{"module": "disk_store"})
+
 	ok, err := existsPersistedStore(config.RootDir)
 	if err != nil {
 		err = fmt.Errorf("could not check if previously-left persisted state exists on disk: %w", err)
@@ -70,21 +76,26 @@ func newStore(config *Config, stats tally.Scope) (*store, error) {
 	if !ok {
 		log.Info("Initialized a new, empty disk.Store (did not find any previously persisted state to reboot for disk.Store)")
 		store := &store{
-			capacity:   config.CapacityBytes,
+			capacity:   config.Capacity,
 			size:       0,
 			blobs:      make(map[string]*blob),
 			evictQueue: list.New(),
+			stopCh:     make(chan struct{}),
+			doneCh:     make(chan struct{}),
 			config:     config,
-			pather:     newPather(config.RootDir, config.ShardLength),
+			pather:     newPather(config.RootDir, config.ShardLength, log),
+			clk:        clk,
 			log:        log,
 			stats:      stats,
 		}
 
+		store.startLeakCleaner()
 		store.emitUsageMetrics()
+		store.stats.Gauge("capacity").Update(float64(store.capacity))
 		return store, nil
 	}
 
-	store, err := rebootPersistedStore(config, log, stats)
+	store, err := rebootPersistedStore(config, log, stats, clk)
 	if err != nil {
 		err = fmt.Errorf("reboot persisted state into memory: %w", err)
 		log.With("error", err).Error("Failed to initialize disk store")
@@ -92,7 +103,9 @@ func newStore(config *Config, stats tally.Scope) (*store, error) {
 	}
 	log.With("num_blobs", len(store.blobs)).Info("Successfully rebooted Store's previously left state on disk")
 
+	store.startLeakCleaner()
 	store.emitUsageMetrics()
+	store.stats.Gauge("capacity").Update(float64(store.capacity))
 	return store, nil
 }
 
@@ -116,7 +129,7 @@ func (s *store) Open(key string, scope storelib.BlobScope) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	return newFile(f), nil
+	return newFile(f, path), nil
 }
 
 func (s *store) Has(key string, scope storelib.BlobScope) (inStore bool, inScope bool) {
@@ -150,7 +163,7 @@ func (s *store) Stat(key string, scope storelib.BlobScope) (os.FileInfo, error) 
 	return os.Stat(blobPath)
 }
 
-func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
+func (s *store) Create(key string, size uint64) (*File, error) {
 	// TODO - we might want some TTI on uploads to the store, after which we cancel the upload, e.g. 1min without the client uploading more data.
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -159,51 +172,49 @@ func (s *store) Create(key string, sizeBytes uint64) (*File, error) {
 		return nil, os.ErrExist
 	}
 
-	if err := s.ensureFreeSpace(sizeBytes); err != nil {
+	if err := s.ensureFreeSpace(size); err != nil {
 		return nil, fmt.Errorf("ensure free space: %w", err)
 	}
-	s.size += sizeBytes
+	s.size += size
 
 	dirName := s.dirPath(key, _incompleteBlob)
 	err := os.MkdirAll(dirName, _defaultFilePerm)
 	if err != nil {
-		s.releaseSpace(sizeBytes)
+		s.releaseSpace(size)
 		return nil, fmt.Errorf("ensure dir: %w", err)
 	}
 	blobPath := s.blobPath(key, _incompleteBlob)
 	f, err := os.OpenFile(blobPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, _defaultFilePerm)
 	if err != nil {
-		s.releaseSpace(sizeBytes)
+		s.releaseSpace(size)
 		return nil, fmt.Errorf("open file: %w", err)
 	}
 
-	if s.config.RebootIncompleteBlobs {
-		err = s.persistBlobSize(key, sizeBytes)
-		if err != nil {
-			// Fail-open: the blob will be discarded upon reboot if incomplete.
-			s.log.With("error", err).Error("Could not persist client-provided blob size on disk")
-		}
+	err = s.persistBlobSize(key, size)
+	if err != nil {
+		// Fail-open: the blob will be discarded upon reboot.
+		s.log.With("error", err).Error("Could not persist client-provided blob size on disk")
 	}
 
 	s.blobs[key] = &blob{
-		size:           sizeBytes,
+		size:           size,
 		node:           nil,
 		complete:       false,
 		evictionBanned: false,
 	}
 
 	s.emitUsageMetrics()
-	return newFile(f), nil
+	return newFile(f, blobPath), nil
 }
 
-func (s *store) persistBlobSize(key string, sizeBytes uint64) error {
+func (s *store) persistBlobSize(key string, size uint64) error {
 	blobSizeFilePath := s.sidecarFilePath(key, _incompleteBlob, _blobSizeFileName)
 	blobSizeF, err := os.OpenFile(blobSizeFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, _defaultFilePerm)
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
 	}
 	defer closers.Close(blobSizeF)
-	_, err = blobSizeF.Write([]byte(strconv.Itoa(int(sizeBytes))))
+	_, err = blobSizeF.Write([]byte(strconv.Itoa(int(size))))
 	if err != nil {
 		return fmt.Errorf("write to size file: %w", err)
 	}
@@ -220,7 +231,7 @@ func (s *store) ensureFreeSpace(space uint64) error {
 	for s.size+space > s.capacity {
 		if s.evictQueue.Len() == 0 {
 			s.log.With(
-				"unevictable_bytes", s.size,
+				"unevictable_size", s.size,
 				"required_space", space,
 				"capacity", s.capacity,
 			).Error("Cannot evict enough data to free space for new entry to Store. The unevictable/incomplete blobs are using up all the space")
@@ -341,6 +352,9 @@ func (s *store) deleteNoLock(key string, scope storelib.BlobScope) error {
 	if err := isOutOfScope(b, scope); err != nil {
 		return err
 	}
+	if b.evictionBanned {
+		s.log.With("key", key).Warn("disk.Store clients are deleting a blob that is banned from eviction")
+	}
 	err := s.deleteFromDisk(key, b.complete)
 	if err != nil {
 		return fmt.Errorf("delete from disk: %w", err)
@@ -368,6 +382,39 @@ func (s *store) List(scope storelib.BlobScope) []string {
 		res = append(res, key)
 	}
 	return res
+}
+
+func (s *store) RenameKey(key, newKey string, scope storelib.BlobScope) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	b, ok := s.blobs[key]
+	if !ok {
+		return os.ErrNotExist
+	}
+	if err := isOutOfScope(b, scope); err != nil {
+		return err
+	}
+	if _, ok := s.blobs[newKey]; ok {
+		return os.ErrExist
+	}
+
+	dirName := s.dirPath(key, b.complete)
+	newDirName := s.dirPath(newKey, b.complete)
+	if err := os.MkdirAll(filepath.Dir(newDirName), _defaultFilePerm); err != nil {
+		return fmt.Errorf("mkdirall: %w", err)
+	}
+	err := os.Rename(dirName, newDirName)
+	if err != nil {
+		return fmt.Errorf("os rename: %w", err)
+	}
+
+	delete(s.blobs, key)
+	s.blobs[newKey] = b
+	if b.node != nil {
+		b.node.Value = newKey
+	}
+	return nil
 }
 
 func (s *store) BanEviction(key string, scope storelib.BlobScope) error {
@@ -682,5 +729,5 @@ func isOutOfScope(b *blob, scope storelib.BlobScope) error {
 
 func (s *store) emitUsageMetrics() {
 	s.stats.Gauge("num_entries").Update(float64(len(s.blobs)))
-	s.stats.Gauge("size_bytes").Update(float64(s.size))
+	s.stats.Gauge("size").Update(float64(s.size))
 }

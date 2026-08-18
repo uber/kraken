@@ -15,7 +15,7 @@ package cmd
 
 import (
 	"github.com/uber/kraken/lib/dockerregistry"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
@@ -28,7 +28,7 @@ import (
 
 // Config defines proxy configuration
 type Config struct {
-	CAStore          store.CAStoreConfig     `yaml:"castore"`
+	DiskStore        disk.Config             `yaml:"diskstore"`
 	Registry         dockerregistry.Config   `yaml:"registry"`
 	BuildIndex       upstream.ActiveConfig   `yaml:"build_index"`
 	Origin           upstream.ActiveConfig   `yaml:"origin"`

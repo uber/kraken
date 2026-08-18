@@ -50,6 +50,8 @@ func newStore(config *Config, stats tally.Scope) (*store, error) {
 	}
 
 	log := log.Default().With("module", "memory_store")
+	stats = stats.Tagged(map[string]string{"module": "memory_store"})
+
 	log.Info("Initialized new, empty memory.Store")
 	s := &store{
 		blobs:      make(map[string]*blob, 0),
@@ -61,6 +63,7 @@ func newStore(config *Config, stats tally.Scope) (*store, error) {
 	}
 
 	s.emitUsageMetrics()
+	s.stats.Gauge("capacity_bytes").Update(float64(s.capacity))
 	return s, nil
 }
 
@@ -164,6 +167,9 @@ func (s *store) Delete(key string, scope storelib.BlobScope) error {
 		return err
 	}
 
+	if b.evictionBanned {
+		s.log.With("key", key).Warn("disk.Store clients are deleting a blob that is banned from eviction")
+	}
 	b.sliceMu.Lock()
 	*b.data = nil // Ensure the byte slice is not referenced by clients outside the store holding [*File], so GC can evict the memory.
 	b.sliceMu.Unlock()

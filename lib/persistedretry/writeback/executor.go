@@ -15,6 +15,7 @@ package writeback
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -22,8 +23,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/persistedretry"
-	"github.com/uber/kraken/lib/store"
-	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 
@@ -34,8 +34,8 @@ var _writebackLatencyBuckets = tally.MustMakeExponentialDurationBuckets(1*time.S
 
 // FileStore defines store operations required for write-back.
 type FileStore interface {
-	DeleteCacheFileMetadata(name string, md metadata.Metadata) error
-	GetCacheFileReader(name string) (store.FileReader, error)
+	UnbanEviction(key string) error
+	Open(name string) (*disk.File, error)
 }
 
 // Executor executes write back tasks.
@@ -48,14 +48,14 @@ type Executor struct {
 // NewExecutor creates a new Executor.
 func NewExecutor(
 	stats tally.Scope,
-	fs FileStore,
+	store *disk.Store,
 	backends *backend.Manager,
 ) *Executor {
 	stats = stats.Tagged(map[string]string{
 		"module": "writebackexecutor",
 	})
 
-	return &Executor{stats, fs, backends}
+	return &Executor{stats, store.ScopeComplete(), backends}
 }
 
 // Name returns the executor name.
@@ -63,7 +63,7 @@ func (e *Executor) Name() string {
 	return "writeback"
 }
 
-// Exec uploads the cache file corresponding to r's digest to the remote backend
+// Exec uploads the file corresponding to r's digest to the remote backend
 // that matches r's namespace.
 func (e *Executor) Exec(r persistedretry.Task) error {
 	t, ok := r.(*Task)
@@ -90,8 +90,8 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 		return err
 	}
 
-	err := e.fs.DeleteCacheFileMetadata(t.Name, &metadata.Persist{})
-	if err != nil && !os.IsNotExist(err) {
+	err := e.fs.UnbanEviction(t.Name)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.WithTraceContext(ctx).With(
 			"namespace", t.Namespace,
 			"name", t.Name,
@@ -130,7 +130,7 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 	log.WithTraceContext(ctx).With(
 		"namespace", t.Namespace,
 		"name", t.Name,
-	).Info("Uploading cache file to the remote backend")
+	).Info("Uploading file to the remote backend")
 
 	client, err := e.backends.GetClient(t.Namespace)
 	if err != nil {
@@ -158,22 +158,22 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 		return nil
 	}
 
-	f, err := e.fs.GetCacheFileReader(t.Name)
+	f, err := e.fs.Open(t.Name)
+	if errors.Is(err, os.ErrNotExist) {
+		// Nothing we can do about this but make noise and drop the task.
+		e.stats.Counter("missing_files").Inc(1)
+		log.WithTraceContext(ctx).With(
+			"namespace", t.Namespace,
+			"name", t.Name,
+		).Error("Invariant violation: writeback file missing")
+		return nil
+	}
 	if err != nil {
-		if os.IsNotExist(err) {
-			// Nothing we can do about this but make noise and drop the task.
-			e.stats.Counter("missing_files").Inc(1)
-			log.WithTraceContext(ctx).With(
-				"namespace", t.Namespace,
-				"name", t.Name,
-			).Error("Invariant violation: writeback cache file missing")
-			return nil
-		}
 		log.WithTraceContext(ctx).With(
 			"namespace", t.Namespace,
 			"name", t.Name,
 			"error", err,
-		).Error("Failed to get cache file reader")
+		).Error("Failed to open file")
 		return fmt.Errorf("get file: %s", err)
 	}
 	defer closers.Close(f)
@@ -195,7 +195,7 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 	log.WithTraceContext(ctx).With(
 		"namespace", t.Namespace,
 		"name", t.Name,
-	).Info("Uploaded cache file to remote backend")
+	).Info("Uploaded file to remote backend")
 
 	s := e.stats.Tagged(map[string]string{
 		"version": "2",

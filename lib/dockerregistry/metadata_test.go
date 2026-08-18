@@ -35,6 +35,9 @@ func TestStartedAtMetadataSerialization(t *testing.T) {
 func TestHashState(t *testing.T) {
 	require := require.New(t)
 
+	// This discrepancy is OK - internally, we store metadata with "_" as a separator,
+	// but when a client requests us to list the hashstates, we use the official API format and use "/".
 	h := newHashStateMetadata("sha256", "500")
-	require.Equal(h.GetSuffix(), "_hashstates/sha256/500")
+	require.Equal(h.GetSuffix(), "_hashstates_sha256_500")
+	require.Equal(h.dockerPath(), "hashstates/sha256/500")
 }

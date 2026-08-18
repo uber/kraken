@@ -1,7 +1,8 @@
-castore:
-  upload_dir: /var/cache/kraken/kraken-proxy/upload/
-  cache_dir:  /var/cache/kraken/kraken-proxy/cache/
-  capacity: 1024
+diskstore:
+  root_dir: /var/cache/kraken/kraken-proxy/disk_store/
+  capacity: 1024 # number of files, NOT bytes!!!
+  reboot_incomplete_blobs: false
+  shard_length: 2
 
 zap:
   level: info

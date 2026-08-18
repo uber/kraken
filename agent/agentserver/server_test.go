@@ -30,7 +30,7 @@ import (
 	"github.com/uber/kraken/agent/agentclient"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/lib/torrent/scheduler/connstate"
 	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
@@ -64,7 +64,7 @@ func (failingResponseWriter) WriteHeader(int) {}
 var _ http.ResponseWriter = failingResponseWriter{}
 
 type serverMocks struct {
-	cads             *store.CADownloadStore
+	diskStore        *disk.Store
 	sched            *mockscheduler.MockReloadableScheduler
 	tags             *mocktagclient.MockClient
 	dockerCli        *mockdockerdaemon.MockDockerClient
@@ -78,8 +78,7 @@ type serverMocks struct {
 func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	var cleanup testutil.Cleanup
 
-	cads, c := store.CADownloadStoreFixture()
-	cleanup.Add(c)
+	diskStore := disk.Fixture(t)
 
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
@@ -94,13 +93,13 @@ func newServerMocks(t *testing.T) (*serverMocks, func()) {
 	containerruntime := mockcontainerruntime.NewMockFactory(ctrl)
 	stats := tally.NewTestScope("", nil)
 	return &serverMocks{
-		cads, sched, tags, dockerCli, containerdCli, ac,
+		diskStore, sched, tags, dockerCli, containerdCli, ac,
 		containerruntime, stats, &cleanup,
 	}, cleanup.Run
 }
 
 func (m *serverMocks) startServer(c Config) (*Server, string) {
-	s := New(c, m.stats, m.cads, m.sched, m.tags, m.ac, m.containerRuntime)
+	s := New(c, m.stats, m.diskStore, m.sched, m.tags, m.ac, m.containerRuntime)
 	addr, stop := testutil.StartServer(s.Handler())
 	m.cleanup.Add(stop)
 	return s, addr
@@ -163,7 +162,8 @@ func TestDownload(t *testing.T) {
 
 	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
 		func(namespace string, d core.Digest) error {
-			return store.RunDownload(mocks.cads, d, blob.Content)
+			disk.RunDownload(t, mocks.diskStore, d.Hex(), blob.Content)
+			return nil
 		})
 
 	_, addr := mocks.startServer(Config{})
@@ -197,7 +197,8 @@ func TestDownloadEmitsMBServed(t *testing.T) {
 
 			mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
 				func(namespace string, d core.Digest) error {
-					return store.RunDownload(mocks.cads, d, blob.Content)
+					disk.RunDownload(t, mocks.diskStore, d.Hex(), blob.Content)
+					return nil
 				})
 
 			_, addr := mocks.startServer(Config{})
@@ -224,11 +225,12 @@ func TestDownloadEmitsMBServedEvenWhenCopyFails(t *testing.T) {
 
 	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
 		func(namespace string, d core.Digest) error {
-			return store.RunDownload(mocks.cads, d, blob.Content)
+			disk.RunDownload(t, mocks.diskStore, d.Hex(), blob.Content)
+			return nil
 		})
 
 	s := New(
-		Config{}, mocks.stats, mocks.cads, mocks.sched, mocks.tags,
+		Config{}, mocks.stats, mocks.diskStore, mocks.sched, mocks.tags,
 		mocks.ac, mocks.containerRuntime)
 
 	rctx := chi.NewRouteContext()

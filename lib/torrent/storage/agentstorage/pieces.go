@@ -14,11 +14,14 @@
 package agentstorage
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sync"
 
 	"github.com/uber/kraken/core"
+	storelib "github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/log"
 )
@@ -134,21 +137,28 @@ func (p *piece) markComplete() {
 // as they are written.
 func restorePieces(
 	d core.Digest,
-	cads caDownloadStore,
+	store *disk.Store,
 	numPieces int) (pieces []*piece, numComplete int, err error) {
 
 	for i := 0; i < numPieces; i++ {
 		pieces = append(pieces, &piece{status: _empty})
 	}
 	md := newPieceStatusMetadata(pieces)
-	if err := cads.Download().GetOrSetMetadata(d.Hex(), md); cads.InCacheError(err) {
-		// File is in cache state -- initialize completed pieces.
+	ok, err := store.ScopeIncomplete().GetMetadata(d.Hex(), md)
+	if errors.Is(err, storelib.ErrOutOfScope) {
+		// File is already complete -- initialize completed pieces.
 		for _, p := range pieces {
 			p.status = _complete
 		}
 		return pieces, numPieces, nil
-	} else if err != nil {
-		return nil, 0, fmt.Errorf("get or set piece metadata: %s", err)
+	}
+	if err != nil {
+		return nil, 0, fmt.Errorf("get piece metadata: %s", err)
+	}
+	if !ok {
+		if err := store.ScopeIncomplete().SetMetadata(d.Hex(), md); err != nil {
+			return nil, 0, fmt.Errorf("set piece metadata: %s", err)
+		}
 	}
 	for _, p := range md.pieces {
 		if p.status == _complete {

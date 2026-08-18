@@ -15,6 +15,7 @@ package store
 
 import (
 	"bytes"
+	"errors"
 	"os"
 )
 
@@ -31,7 +32,7 @@ func createOrUpdateSymlink(sourcePath, targetPath string) error {
 				return err
 			}
 		}
-	} else if os.IsNotExist(err) {
+	} else if errors.Is(err, os.ErrNotExist) {
 		if err := os.Symlink(sourcePath, targetPath); err != nil {
 			return err
 		}
