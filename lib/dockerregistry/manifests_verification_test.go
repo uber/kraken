@@ -28,9 +28,7 @@ import (
 func buildDriverWithVerification(t *testing.T, decision SignatureVerificationDecision, retErr error, called *bool) (*KrakenStorageDriver, string, string) {
 	t.Helper()
 
-	// Create CA store + transferer
-	td, cleanup := newTestDriver()
-	t.Cleanup(cleanup)
+	td := newTestDriver(t)
 
 	// Prepare blobs and manifest in transferer
 	config := core.NewBlobFixture()
@@ -58,7 +56,7 @@ func buildDriverWithVerification(t *testing.T, decision SignatureVerificationDec
 		require.Equal(t, manifestDigest, vDigest)
 		return decision, retErr
 	}
-	sd := NewReadWriteStorageDriver(Config{}, td.cas, td.transferer, verif)
+	sd := NewReadWriteStorageDriver(Config{}, td.store, td.transferer, verif)
 
 	// Path that triggers manifests.getDigest → verify
 	path := genManifestTagCurrentLinkPath(repo, tag, manifestDigest.Hex())
