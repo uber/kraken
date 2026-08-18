@@ -16,6 +16,7 @@ package disk
 import (
 	"testing"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 
@@ -33,7 +34,7 @@ func Fixture(t *testing.T) *Store {
 		Capacity:    _fixtureCapacity,
 		RootDir:     t.TempDir(),
 		ShardLength: 2,
-	}, tally.NoopScope)
+	}, tally.NoopScope, clock.New())
 	require.NoError(t, err)
 	return s
 }

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
@@ -35,7 +36,7 @@ func newStore(config *Config, stats tally.Scope) (*store, *disk.Store, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("new mem store: %w", err)
 	}
-	diskStore, err := disk.NewStore(config.DiskConfig, stats)
+	diskStore, err := disk.NewStore(config.DiskConfig, stats, clock.New())
 	if err != nil {
 		return nil, nil, fmt.Errorf("new disk store: %w", err)
 	}

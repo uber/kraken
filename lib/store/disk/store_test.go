@@ -14,6 +14,7 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
@@ -34,7 +35,7 @@ func newTestStore(t *testing.T, capacity uint64, rebootIncompleteBlobs bool) (re
 		ShardLength:           _defaultShardLength,
 	}
 
-	store, err := NewStore(config, tally.NoopScope)
+	store, err := NewStore(config, tally.NoopScope, clock.New())
 	require.NoError(t, err)
 	return store, store.impl.config.RootDir
 }
@@ -1466,7 +1467,7 @@ func TestConfig__applyDefaults(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := NewStore(tt.config, tally.NoopScope)
+			_, err := NewStore(tt.config, tally.NoopScope, clock.New())
 			if tt.wantErr != "" {
 				require.EqualError(t, err, tt.wantErr)
 			} else {
@@ -1474,4 +1475,107 @@ func TestConfig__applyDefaults(t *testing.T) {
 			}
 		})
 	}
+}
+
+func createAgedIncompleteBlob(t *testing.T, store *Store, key string, age time.Duration) {
+	require := require.New(t)
+
+	f, err := store.Create(key, 1)
+	require.NoError(err)
+	require.NoError(f.Close())
+
+	mtime := store.impl.clk.Now().Add(-age)
+	blobPath := store.impl.blobPath(key, _incompleteBlob)
+	require.NoError(os.Chtimes(blobPath, mtime, mtime))
+}
+
+func TestLeakCleaner(t *testing.T) {
+	const _margin = 5 * time.Second
+
+	t.Run("deletes a leaked blob once it crosses the TTI", func(t *testing.T) {
+		require := require.New(t)
+		clk := clock.NewMock()
+		clk.Set(time.Now())
+		config := &Config{Capacity: 10 * memsize.MB, RootDir: t.TempDir(), ShardLength: 0}
+		store, err := NewStore(config, tally.NoopScope, clk)
+		require.NoError(err)
+		t.Cleanup(store.impl.close)
+
+		createAgedIncompleteBlob(t, store, "leaked", config.IncompleteBlobTTI+_margin)
+
+		store.impl.cleanLeakedFiles()
+
+		ok, _ := store.Has("leaked")
+		require.False(ok)
+	})
+
+	t.Run("does not touch blobs still within the TTI", func(t *testing.T) {
+		require := require.New(t)
+		clk := clock.NewMock()
+		clk.Set(time.Now())
+		config := &Config{Capacity: 10 * memsize.MB, RootDir: t.TempDir(), ShardLength: 0}
+		store, err := NewStore(config, tally.NoopScope, clk)
+		require.NoError(err)
+		t.Cleanup(store.impl.close)
+
+		createAgedIncompleteBlob(t, store, "leaked", config.IncompleteBlobTTI+_margin)
+		createAgedIncompleteBlob(t, store, "safe", config.IncompleteBlobTTI-_margin)
+
+		store.impl.cleanLeakedFiles()
+
+		ok, _ := store.Has("leaked")
+		require.False(ok)
+
+		ok, _ = store.Has("safe")
+		require.True(ok)
+	})
+
+	t.Run("fails open: one blob failing to delete does not stop others from being cleaned up", func(t *testing.T) {
+		require := require.New(t)
+		clk := clock.NewMock()
+		clk.Set(time.Now())
+		config := &Config{Capacity: 10 * memsize.MB, RootDir: t.TempDir(), ShardLength: 0}
+		store, err := NewStore(config, tally.NoopScope, clk)
+		require.NoError(err)
+		t.Cleanup(store.impl.close)
+
+		createAgedIncompleteBlob(t, store, "leaked-ok", config.IncompleteBlobTTI+_margin)
+		createAgedIncompleteBlob(t, store, "leaked-blocked", config.IncompleteBlobTTI+_margin)
+
+		// Strip write permission on the blocked blob's own directory so os.RemoveAll fails
+		// deterministically on it, without touching any other blob's directory.
+		blockedDir := store.impl.dirPath("leaked-blocked", _incompleteBlob)
+		require.NoError(os.Chmod(blockedDir, 0555))
+		t.Cleanup(func() { require.NoError(os.Chmod(blockedDir, 0755)) })
+
+		store.impl.cleanLeakedFiles()
+
+		ok, _ := store.Has("leaked-ok")
+		require.False(ok)
+
+		ok, _ = store.Has("leaked-blocked")
+		require.True(ok)
+
+		_, err = os.Stat(store.impl.blobPath("leaked-blocked", _incompleteBlob))
+		require.NoError(err)
+	})
+
+	t.Run("background ticker triggers cleanup on schedule", func(t *testing.T) {
+		require := require.New(t)
+		clk := clock.NewMock()
+		clk.Set(time.Now())
+		config := &Config{Capacity: 10 * memsize.MB, RootDir: t.TempDir(), ShardLength: 0}
+		store, err := NewStore(config, tally.NoopScope, clk)
+		require.NoError(err)
+		t.Cleanup(store.impl.close)
+
+		createAgedIncompleteBlob(t, store, "leaked", config.IncompleteBlobTTI+_margin)
+
+		clk.Add(config.LeakCleanerInterval)
+
+		require.Eventually(func() bool {
+			ok, _ := store.Has("leaked")
+			return !ok
+		}, time.Second, 5*time.Millisecond)
+	})
 }

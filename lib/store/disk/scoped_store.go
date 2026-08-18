@@ -3,6 +3,7 @@ package disk
 import (
 	"os"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
@@ -33,8 +34,8 @@ type Store struct {
 //
 //   - If the store's size is bigger than its capacity (e.g. configured capacity has been reduced or files have been leaked),
 //     it evicts blobs until size is within capacity.
-func NewStore(config *Config, stats tally.Scope) (*Store, error) {
-	s, err := newStore(config, stats)
+func NewStore(config *Config, stats tally.Scope, clk clock.Clock) (*Store, error) {
+	s, err := newStore(config, stats, clk)
 	if err != nil {
 		return nil, err
 	}

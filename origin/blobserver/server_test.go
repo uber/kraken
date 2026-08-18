@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
@@ -723,7 +724,8 @@ func newTestDiskStore(t *testing.T) *disk.Store {
 		Capacity:    100,
 		RootDir:     t.TempDir(),
 		ShardLength: 2,
-	}, tally.NoopScope)
+	}, tally.NoopScope, clock.New(),
+	)
 	require.NoError(t, err)
 	return d
 }

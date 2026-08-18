@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
@@ -41,7 +42,10 @@ type store struct {
 	evictQueue *list.List       // Front is the next to evict.
 	// Synchronizes 1) mem state and 2) disk state. Only acquired by public methods.
 	mu     sync.RWMutex // TODO - evaluate whether the read-to-write ratio is more appropriate for a [sync.Mutex] instead.
+	stopCh chan struct{}
+	doneCh chan struct{}
 	config *Config
+	clk    clock.Clock
 	log    *zap.SugaredLogger
 	stats  tally.Scope
 	*pather
@@ -54,7 +58,7 @@ type blob struct {
 	evictionBanned bool
 }
 
-func newStore(config *Config, stats tally.Scope) (*store, error) {
+func newStore(config *Config, stats tally.Scope, clk clock.Clock) (*store, error) {
 	err := config.applyDefaults()
 	if err != nil {
 		return nil, err
@@ -76,18 +80,22 @@ func newStore(config *Config, stats tally.Scope) (*store, error) {
 			size:       0,
 			blobs:      make(map[string]*blob),
 			evictQueue: list.New(),
+			stopCh:     make(chan struct{}),
+			doneCh:     make(chan struct{}),
 			config:     config,
 			pather:     newPather(config.RootDir, config.ShardLength, log),
+			clk:        clk,
 			log:        log,
 			stats:      stats,
 		}
 
+		store.startLeakCleaner()
 		store.emitUsageMetrics()
 		store.stats.Gauge("capacity").Update(float64(store.capacity))
 		return store, nil
 	}
 
-	store, err := rebootPersistedStore(config, log, stats)
+	store, err := rebootPersistedStore(config, log, stats, clk)
 	if err != nil {
 		err = fmt.Errorf("reboot persisted state into memory: %w", err)
 		log.With("error", err).Error("Failed to initialize disk store")
@@ -95,6 +103,7 @@ func newStore(config *Config, stats tally.Scope) (*store, error) {
 	}
 	log.With("num_blobs", len(store.blobs)).Info("Successfully rebooted Store's previously left state on disk")
 
+	store.startLeakCleaner()
 	store.emitUsageMetrics()
 	store.stats.Gauge("capacity").Update(float64(store.capacity))
 	return store, nil

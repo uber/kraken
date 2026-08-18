@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/utils/closers"
 	"go.uber.org/zap"
@@ -24,7 +25,7 @@ type rebootedBlob struct {
 	complete  bool
 }
 
-func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Scope) (*store, error) {
+func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Scope, clk clock.Clock) (*store, error) {
 	incompleteDirPath := filepath.Join(config.RootDir, _incompleteSubDir)
 	if !config.RebootIncompleteBlobs {
 		err := os.RemoveAll(incompleteDirPath)
@@ -100,7 +101,10 @@ func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Sc
 		capacity:   config.Capacity,
 		size:       storeSize,
 		pather:     pather,
+		stopCh:     make(chan struct{}),
+		doneCh:     make(chan struct{}),
 		config:     config,
+		clk:        clk,
 		log:        log,
 		stats:      stats,
 	}

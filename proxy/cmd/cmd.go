@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
@@ -149,7 +150,7 @@ func Run(flags *Flags, opts ...Option) {
 		overrides.effect()
 	}
 
-	diskStore, err := disk.NewStore(&config.DiskStore, stats)
+	diskStore, err := disk.NewStore(&config.DiskStore, stats, clock.New())
 	if err != nil {
 		log.Fatalf("Failed to create store: %s", err)
 	}

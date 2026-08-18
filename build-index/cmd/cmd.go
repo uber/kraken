@@ -17,6 +17,7 @@ import (
 	"flag"
 	"runtime"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/build-index/tagserver"
 	"github.com/uber/kraken/build-index/tagstore"
@@ -144,7 +145,7 @@ func Run(flags *Flags, opts ...Option) {
 		defer closers.Close(closer)
 	}
 
-	store, err := disk.NewStore(&config.Store, stats)
+	store, err := disk.NewStore(&config.Store, stats, clock.New())
 	if err != nil {
 		log.Fatalf("Error creating disk store: %s", err)
 	}
