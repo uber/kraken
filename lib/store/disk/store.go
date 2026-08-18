@@ -120,7 +120,7 @@ func (s *store) Open(key string, scope storelib.BlobScope) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	return newFile(f), nil
+	return newFile(f, path), nil
 }
 
 func (s *store) Has(key string, scope storelib.BlobScope) (inStore bool, inScope bool) {
@@ -195,7 +195,7 @@ func (s *store) Create(key string, size uint64) (*File, error) {
 	}
 
 	s.emitUsageMetrics()
-	return newFile(f), nil
+	return newFile(f, blobPath), nil
 }
 
 func (s *store) persistBlobSize(key string, size uint64) error {
