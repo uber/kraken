@@ -19,6 +19,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/lib/store/tiered"
+	"github.com/uber/kraken/utils/closers"
 )
 
 // Generator wraps static piece length configuration in order to determinstically
@@ -47,6 +48,7 @@ func (g *Generator) Generate(d core.Digest) error {
 	if err != nil {
 		return fmt.Errorf("open blob: %s", err)
 	}
+	defer closers.Close(f)
 	pieceLength := g.pieceLengthConfig.get(size)
 	mi, err := core.NewMetaInfo(d, f, pieceLength)
 	if err != nil {

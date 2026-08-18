@@ -75,7 +75,7 @@ func TestCleanupManagerAddJob(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	_, err := op.GetFileStat(name)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func TestCleanupManagerDeleteIdleFiles(t *testing.T) {
@@ -116,7 +116,7 @@ func TestCleanupManagerDeleteIdleFiles(t *testing.T) {
 
 	for _, name := range idle {
 		_, err := op.GetFileStat(name)
-		require.True(os.IsNotExist(err))
+		require.True(errors.Is(err, os.ErrNotExist))
 	}
 	for _, name := range active {
 		_, err := op.GetFileStat(name)
@@ -163,7 +163,7 @@ func TestCleanupManagerDeleteExpiredFiles(t *testing.T) {
 
 	for _, name := range names {
 		_, err := op.GetFileStat(name)
-		require.True(os.IsNotExist(err))
+		require.True(errors.Is(err, os.ErrNotExist))
 	}
 }
 
@@ -208,7 +208,7 @@ func TestCleanupManagerSkipsPersistedFiles(t *testing.T) {
 
 	for _, name := range idle {
 		_, err := op.GetFileStat(name)
-		require.True(os.IsNotExist(err))
+		require.True(errors.Is(err, os.ErrNotExist))
 	}
 	for _, name := range persisted {
 		_, err := op.GetFileStat(name)

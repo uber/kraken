@@ -14,6 +14,7 @@
 package agentstorage
 
 import (
+	"errors"
 	"os"
 	"sync"
 	"testing"
@@ -92,7 +93,7 @@ func TestTorrentArchiveStatNotExist(t *testing.T) {
 	d := core.DigestFixture()
 
 	_, err := archive.Stat(namespace, d)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func TestTorrentArchiveCreateTorrent(t *testing.T) {
@@ -162,7 +163,7 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	require.NoError(archive.DeleteTorrent(mi.Digest()))
 
 	_, err = archive.Stat(namespace, mi.Digest())
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func TestTorrentArchiveConcurrentGet(t *testing.T) {

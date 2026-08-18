@@ -15,6 +15,7 @@ package writeback
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -90,7 +91,7 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 	}
 
 	err := e.fs.UnbanEviction(t.Name)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.WithTraceContext(ctx).With(
 			"namespace", t.Namespace,
 			"name", t.Name,
@@ -158,7 +159,7 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 	}
 
 	f, err := e.fs.Open(t.Name)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		// Nothing we can do about this but make noise and drop the task.
 		e.stats.Counter("missing_files").Inc(1)
 		log.WithTraceContext(ctx).With(

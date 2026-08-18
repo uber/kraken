@@ -221,7 +221,7 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	bi, err := s.stat(namespace, d, checkLocal)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		log.With("namespace", namespace, "digest", d.Hex(), "local", checkLocal).Debug("Blob not found")
 		return handler.ErrorStatus(http.StatusNotFound)
 	} else if err != nil {
@@ -239,7 +239,7 @@ func (s *Server) stat(namespace string, d core.Digest, checkLocal bool) (*core.B
 		log.With("namespace", namespace, "digest", d.Hex(), "size", size).Debug("Found blob in local cache")
 		return core.NewBlobInfo(size), nil
 	}
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		if !checkLocal {
 			log.With("namespace", namespace, "digest", d.Hex()).Debug("Blob not in local cache, checking backend")
 			client, err := s.backends.GetClient(namespace)
@@ -325,7 +325,7 @@ func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request
 func (s *Server) replicateToRemote(ctx context.Context, namespace string, d core.Digest, remoteDNS string) error {
 	start := time.Now()
 	size, err := s.tieredStore.ScopeComplete().Stat(d.Hex())
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS).Info("Blob not in cache, starting remote download")
 		return s.startRemoteBlobDownload(namespace, d, false)
 	}
@@ -581,7 +581,7 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 // return a "202 Accepted" handler error.
 func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	f, err := s.tieredStore.ScopeComplete().Open(d.Hex())
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		log.With("namespace", namespace, "digest", d.Hex()).
 			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
@@ -602,7 +602,7 @@ func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) er
 }
 
 func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
-	_, ok := s.tieredStore.Has(d.Hex())
+	_, ok := s.tieredStore.ScopeComplete().Has(d.Hex())
 	if ok {
 		log.With("namespace", namespace, "digest", d.Hex()).
 			Info("Prefetch successful, blob already in cache")
@@ -616,7 +616,7 @@ func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
 
 func (s *Server) deleteBlob(d core.Digest) error {
 	if err := s.tieredStore.ScopeComplete().Delete(d.Hex()); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			log.With("digest", d.Hex()).Warn("Attempted to delete non-existent blob")
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
@@ -882,6 +882,10 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 	// Get blob size for replication logging
 	blobSize, err := s.tieredStore.ScopeComplete().Stat(d.Hex())
 	if err != nil {
+		err = fmt.Errorf("store stat: %w", err)
+		log.With(
+			"digest", d.Hex(),
+			"error", err).Warn("Error duplicating write-back task to replicas")
 		// Don't fail the commit if replication fails - blob is still uploaded.
 		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Error duplicating write-back task to replicas: %s", err)
 		span.SetAttributes(attribute.String("replication.error", err.Error()))

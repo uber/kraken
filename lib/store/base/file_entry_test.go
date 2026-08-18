@@ -14,6 +14,7 @@
 package base
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -249,7 +250,7 @@ func testCreateFail(require *require.Assertions, bundle *fileEntryTestBundle) {
 	require.True(IsFileStateError(err))
 	_, err = os.Stat(fp)
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func testMoveFrom(require *require.Assertions, bundle *fileEntryTestBundle) {
@@ -307,7 +308,7 @@ func testMoveFromWrongState(require *require.Assertions, bundle *fileEntryTestBu
 	require.True(IsFileStateError(err))
 	_, err = os.Stat(fp)
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func testMoveFromWrongSourcePath(require *require.Assertions, bundle *fileEntryTestBundle) {
@@ -319,10 +320,10 @@ func testMoveFromWrongSourcePath(require *require.Assertions, bundle *fileEntryT
 	// MoveFrom fails with wrong source path.
 	err := fe.MoveFrom(s1, "")
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	_, err = os.Stat(fp)
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func testMove(require *require.Assertions, bundle *fileEntryTestBundle) {
@@ -365,18 +366,18 @@ func testMove(require *require.Assertions, bundle *fileEntryTestBundle) {
 	require.NoError(err)
 	_, err = os.Stat(fp)
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	_, err = os.Stat(fe.GetPath())
 	require.NoError(err)
 
 	// Verify metadata that's not movable is deleted.
 	err = fe.GetMetadata(getMockMetadataOne())
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	for _, s := range []FileState{s1, s2, s3} {
 		_, err = os.Stat(filepath.Join(s.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 		require.Error(err)
-		require.True(os.IsNotExist(err))
+		require.True(errors.Is(err, os.ErrNotExist))
 	}
 
 	// Verify metadata that's movable should have been moved along with the file entry.
@@ -388,10 +389,10 @@ func testMove(require *require.Assertions, bundle *fileEntryTestBundle) {
 	require.Nil(err)
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	_, err = os.Stat(filepath.Join(s2.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	_, err = os.Stat(filepath.Join(s3.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.NoError(err)
 }
@@ -447,13 +448,13 @@ func testDelete(require *require.Assertions, bundle *fileEntryTestBundle) {
 	// Verify the data file and metadata files are all deleted.
 	_, err = os.Stat(fp)
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), fn, getMockMetadataOne().GetSuffix()))
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), fn, getMockMetadataMovable().GetSuffix()))
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func testDeleteFailsForPersistedFile(require *require.Assertions, bundle *fileEntryTestBundle) {
@@ -509,11 +510,11 @@ func testGetMetadataFail(require *require.Assertions, bundle *fileEntryTestBundl
 
 	// Invalid read.
 	err := fe.GetMetadata(m1)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 
 	// Invalid read.
 	err = fe.GetMetadata(m2)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func testSetMetadataAt(require *require.Assertions, bundle *fileEntryTestBundle) {
@@ -573,7 +574,7 @@ func testDeleteMetadata(require *require.Assertions, bundle *fileEntryTestBundle
 
 	err = fe.GetMetadata(getMockMetadataOne())
 	require.Error(err)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func testRangeMetadata(require *require.Assertions, bundle *fileEntryTestBundle) {
