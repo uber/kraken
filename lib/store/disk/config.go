@@ -1,8 +1,9 @@
 package disk
 
-import "errors"
-
-const _defaultRootDir = "disk_store"
+import (
+	"errors"
+	"time"
+)
 
 // Config configures [Store].
 type Config struct {
@@ -21,6 +22,10 @@ type Config struct {
 	// 1) the length of each directory shard's name and 2) the number of shards.
 	// A value of 0 denotes no sharding.
 	ShardLength int `yaml:"shard_length"`
+	// How long an incomplete blob can stay unmodified before it is considered leaked by the leak cleaner.
+	IncompleteBlobTTI time.Duration `yaml:"incomplete_blob_tti"`
+	// The interval at which the leak cleaner scans for and deletes incomplete blobs that have not been used for [Config.IncompleteBlobTTI].
+	LeakCleanerInterval time.Duration `yaml:"leak_cleaner_interval"`
 }
 
 func (c *Config) applyDefaults() error {
@@ -31,7 +36,13 @@ func (c *Config) applyDefaults() error {
 		return errors.New("shard_length must be non-negative")
 	}
 	if c.RootDir == "" {
-		c.RootDir = _defaultRootDir
+		c.RootDir = "disk_store"
+	}
+	if c.IncompleteBlobTTI == 0 {
+		c.IncompleteBlobTTI = 5 * time.Minute
+	}
+	if c.LeakCleanerInterval == 0 {
+		c.LeakCleanerInterval = 10 * time.Minute
 	}
 	return nil
 }

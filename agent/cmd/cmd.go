@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/agent/agentserver"
 	"github.com/uber/kraken/build-index/tagclient"
@@ -178,7 +179,7 @@ func Run(flags *Flags, opts ...Option) {
 		log.Fatalf("Failed to create peer context: %s", err)
 	}
 
-	diskStore, err := disk.NewStore(&config.DiskStore, stats)
+	diskStore, err := disk.NewStore(&config.DiskStore, stats, clock.New())
 	if err != nil {
 		log.Fatalf("Failed to create local store: %s", err)
 	}
