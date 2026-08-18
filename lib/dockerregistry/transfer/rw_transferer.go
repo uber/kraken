@@ -15,6 +15,7 @@ package transfer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -22,7 +23,8 @@ import (
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/observability"
-	"github.com/uber/kraken/lib/store"
+	storelib "github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
@@ -45,7 +47,7 @@ type ReadWriteTransferer struct {
 	failureStats  tally.Scope
 	tags          tagclient.Client
 	originCluster blobclient.ClusterClient
-	cas           *store.CAStore
+	store         *disk.Store
 	tracer        trace.Tracer
 }
 
@@ -54,7 +56,7 @@ func NewReadWriteTransferer(
 	stats tally.Scope,
 	tags tagclient.Client,
 	originCluster blobclient.ClusterClient,
-	cas *store.CAStore,
+	store *disk.Store,
 ) *ReadWriteTransferer {
 	stats = stats.Tagged(map[string]string{
 		"module": "rwtransferer",
@@ -66,18 +68,18 @@ func NewReadWriteTransferer(
 		failureStats:  stats.Tagged(map[string]string{"result": "failure"}),
 		tags:          tags,
 		originCluster: originCluster,
-		cas:           cas,
+		store:         store,
 		tracer:        otel.Tracer("kraken-registry-transfer"),
 	}
 }
 
 // Stat returns blob info from origin cluster or local cache.
 func (t *ReadWriteTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
-	fi, err := t.cas.GetCacheFileStat(d.Hex())
+	fi, err := t.store.ScopeComplete().Stat(d.Hex())
 	if err == nil {
 		return core.NewBlobInfo(fi.Size()), nil
 	}
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, storelib.ErrOutOfScope) {
 		return t.originStat(namespace, d)
 	}
 	return nil, fmt.Errorf("stat cache file: %s", err)
@@ -101,7 +103,7 @@ func (t *ReadWriteTransferer) originStat(namespace string, d core.Digest) (*core
 
 // Download downloads the blob of name into the file store and returns a reader
 // to the newly downloaded file.
-func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
+func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (storelib.FileReader, error) {
 	start := time.Now()
 	t.stats.Counter("download_requests").Inc(1)
 	ctx, span := t.tracer.Start(context.Background(), "registry.download_blob",
@@ -115,7 +117,8 @@ func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.F
 	)
 	defer span.End()
 
-	blob, err := t.cas.GetCacheFileReader(d.Hex())
+	var blob storelib.FileReader
+	blob, err := t.store.ScopeComplete().Open(d.Hex())
 	if err == nil {
 		span.SetAttributes(attribute.String("cache.status", "hit"))
 		span.SetStatus(codes.Ok, "cache hit")
@@ -124,7 +127,7 @@ func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.F
 		observability.EmitDownloadPerformance(t.stats, observability.PROXY_BLOB_DOWNLOAD, blob.Size(), time.Since(start))
 		return blob, nil
 	}
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, storelib.ErrOutOfScope) {
 		span.SetAttributes(attribute.String("cache.status", "miss"))
 		blob, err = t.downloadFromOrigin(ctx, namespace, d)
 		if err != nil {
@@ -142,7 +145,7 @@ func (t *ReadWriteTransferer) Download(namespace string, d core.Digest) (store.F
 	return nil, fmt.Errorf("get cache file: %s", err)
 }
 
-func (t *ReadWriteTransferer) downloadFromOrigin(ctx context.Context, namespace string, d core.Digest) (store.FileReader, error) {
+func (t *ReadWriteTransferer) downloadFromOrigin(ctx context.Context, namespace string, d core.Digest) (storelib.FileReader, error) {
 	ctx, span := t.tracer.Start(ctx, "registry.download_from_origin",
 		trace.WithAttributes(
 			attribute.String("namespace", namespace),
@@ -151,17 +154,19 @@ func (t *ReadWriteTransferer) downloadFromOrigin(ctx context.Context, namespace 
 	)
 	defer span.End()
 
+	// We use a tmp key instead of the d.Hex() directly, as this func needs
+	// to return a reader to the newly downloaded data and if 2 routines
+	// race to download from origin, the loser doesn't know when it can
+	// return the opened file (it would need to poll for the download's completeness).
+	// Thus we use tmp files to ensure every routine has its own blob to return a reader to.
+	//
+	// TODO - consider deduplicating these multiple downloads.
 	tmp := fmt.Sprintf("%s.%s", d.Hex(), uuid.Generate().String())
-	if err := t.cas.CreateUploadFile(tmp, 0); err != nil {
+	w, err := t.store.Create(tmp, 1)
+	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to create upload file")
 		return nil, fmt.Errorf("create upload file: %s", err)
-	}
-	w, err := t.cas.GetUploadFileReadWriter(tmp)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to get upload writer")
-		return nil, fmt.Errorf("get upload writer: %s", err)
 	}
 	defer closers.Close(w)
 	if err := t.originCluster.DownloadBlob(ctx, namespace, d, w); err != nil {
@@ -173,16 +178,30 @@ func (t *ReadWriteTransferer) downloadFromOrigin(ctx context.Context, namespace 
 		span.SetStatus(codes.Error, "origin download failed")
 		return nil, fmt.Errorf("origin: %s", err)
 	}
-	if err := t.cas.MoveUploadFileToCache(tmp, d.Hex()); err != nil && !os.IsExist(err) {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to move to cache")
-		return nil, fmt.Errorf("move upload file to cache: %s", err)
+	err = t.store.RenameKey(tmp, d.Hex())
+	if err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed rename file after upload")
+			return nil, fmt.Errorf("rename key: %s", err)
+		}
+		// Another downloader already cached this digest; discard our copy.
+		if err := t.store.Delete(tmp); err != nil {
+			log.With("digest", d).Errorf("Leaked upload file: %s", err)
+		}
+	} else {
+		err := t.store.MarkComplete(d.Hex())
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to mark complete")
+			return nil, fmt.Errorf("mark complete: %s", err)
+		}
 	}
-	blob, err := t.cas.GetCacheFileReader(d.Hex())
+	blob, err := t.store.ScopeComplete().Open(d.Hex())
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to read cached blob")
-		return nil, fmt.Errorf("get cache file: %s", err)
+		span.SetStatus(codes.Error, "failed to open cached blob")
+		return nil, fmt.Errorf("open file: %s", err)
 	}
 
 	span.SetStatus(codes.Ok, "download completed")
@@ -191,7 +210,7 @@ func (t *ReadWriteTransferer) downloadFromOrigin(ctx context.Context, namespace 
 
 // Upload uploads blob to the origin cluster.
 func (t *ReadWriteTransferer) Upload(
-	namespace string, d core.Digest, blob store.FileReader,
+	namespace string, d core.Digest, blob storelib.FileReader,
 ) error {
 	t.stats.Counter("upload_requests").Inc(1)
 	ctx, span := t.tracer.Start(context.Background(), "registry.upload_blob",

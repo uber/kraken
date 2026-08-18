@@ -20,18 +20,18 @@ import (
 	"time"
 
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/log"
 )
 
 const (
-	_startedAtSuffix = "_startedat"
-	_startedAtLayout = time.RFC3339
+	_startedAtSuffix  = "_startedat"
+	_startedAtLayout  = time.RFC3339
+	_hashStatesPrefix = "_hashstates_"
 )
 
 func init() {
 	metadata.Register(regexp.MustCompile(_startedAtSuffix), &startedAtMetadataFactory{})
-
-	// TODO(evelynl): use _ instead of /, otherwise it won't support reload.
-	metadata.Register(regexp.MustCompile(`_hashstates/\w+/\w+$`), &hashStateMetadataFactory{})
+	metadata.Register(regexp.MustCompile(_hashStatesPrefix+`\w+_\w+$`), &hashStateMetadataFactory{})
 }
 
 type startedAtMetadataFactory struct{}
@@ -73,13 +73,13 @@ func (s *startedAtMetadata) Deserialize(b []byte) error {
 type hashStateMetadataFactory struct{}
 
 func (f hashStateMetadataFactory) Create(suffix string) metadata.Metadata {
-	parts := strings.Split(suffix, "/")
-	if len(parts) != 3 {
+	rest := strings.TrimPrefix(suffix, _hashStatesPrefix)
+	parts := strings.SplitN(rest, "_", 2)
+	if len(parts) != 2 {
+		log.With("suffix", suffix).Errorf("invariant violation - hashStateMetadata has invalid suffix and cannot be deserialized")
 		return nil
 	}
-	algo := parts[1]
-	offset := parts[2]
-	return newHashStateMetadata(algo, offset)
+	return newHashStateMetadata(parts[0], parts[1])
 }
 
 // hashStateMetadata stores partial hash result of upload data for resumable upload.
@@ -99,7 +99,7 @@ func newHashStateMetadata(algo, offset string) *hashStateMetadata {
 }
 
 func (h *hashStateMetadata) GetSuffix() string {
-	return fmt.Sprintf("_hashstates/%s/%s", h.algo, h.offset)
+	return fmt.Sprintf("%s%s_%s", _hashStatesPrefix, h.algo, h.offset)
 }
 
 func (h *hashStateMetadata) Movable() bool {

@@ -17,10 +17,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"testing"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
-	"github.com/uber/kraken/lib/store"
+	storelib "github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/utils/dockerutil"
 
 	"github.com/docker/distribution/uuid"
@@ -44,18 +46,18 @@ type testImageUploadBundle struct {
 }
 
 type testDriver struct {
-	cas        *store.CAStore
+	store      *disk.Store
 	transferer transfer.ImageTransferer
 }
 
-func newTestDriver() (*testDriver, func()) {
-	cas, cleanup := store.CAStoreFixture()
-	transferer := transfer.NewTestTransferer(cas)
-	return &testDriver{cas, transferer}, cleanup
+func newTestDriver(t *testing.T) *testDriver {
+	store := disk.Fixture(t)
+	transferer := transfer.NewTestTransferer(store)
+	return &testDriver{store, transferer}
 }
 
 func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
-	sd := NewReadWriteStorageDriver(Config{}, d.cas, d.transferer, DefaultVerificationFunc)
+	sd := NewReadWriteStorageDriver(Config{}, d.store, d.transferer, DefaultVerificationFunc)
 
 	// Create upload
 	uploadUUID := uuid.Generate().String()
@@ -68,7 +70,7 @@ func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
 		log.Panic(err)
 	}
 
-	writer, err := d.cas.GetUploadFileReadWriter(uploadUUID)
+	writer, err := d.store.ScopeIncomplete().Open(uploadUUID)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -91,12 +93,12 @@ func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
 		config.Digest, layer1.Digest, layer2.Digest)
 
 	for _, blob := range []*core.BlobFixture{config, layer1, layer2} {
-		err := d.transferer.Upload("unused", blob.Digest, store.NewBufferFileReader(blob.Content))
+		err := d.transferer.Upload("unused", blob.Digest, storelib.NewBufferFileReader(blob.Content))
 		if err != nil {
 			log.Panic(err)
 		}
 	}
-	err = d.transferer.Upload("unused", manifestDigest, store.NewBufferFileReader(manifestRaw))
+	err = d.transferer.Upload("unused", manifestDigest, storelib.NewBufferFileReader(manifestRaw))
 	if err != nil {
 		log.Panic(err)
 	}

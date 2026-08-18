@@ -22,7 +22,7 @@ import (
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/healthcheck"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
@@ -149,7 +149,7 @@ func Run(flags *Flags, opts ...Option) {
 		overrides.effect()
 	}
 
-	cas, err := store.NewCAStore(config.CAStore, stats)
+	diskStore, err := disk.NewStore(&config.DiskStore, stats)
 	if err != nil {
 		log.Fatalf("Failed to create store: %s", err)
 	}
@@ -175,14 +175,14 @@ func Run(flags *Flags, opts ...Option) {
 
 	tagClient := tagclient.NewClusterClient(buildIndexes, tls)
 
-	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, cas)
+	transferer := transfer.NewReadWriteTransferer(stats, tagClient, originCluster, diskStore)
 
 	server := proxyserver.New(stats, config.Server, originCluster, tagClient, false)
 	go func() {
 		log.Fatalf("Error starting proxy server %s", server.ListenAndServe())
 	}()
 
-	registry, err := config.Registry.Build(config.Registry.ReadWriteParameters(transferer, cas, stats))
+	registry, err := config.Registry.Build(config.Registry.ReadWriteParameters(transferer, diskStore, stats))
 	if err != nil {
 		log.Fatalf("Error creating registry: %s", err)
 	}

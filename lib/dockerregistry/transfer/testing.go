@@ -14,24 +14,29 @@
 package transfer
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path"
 	"strings"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/namepath"
-	"github.com/uber/kraken/lib/store"
+	storelib "github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
+	"github.com/uber/kraken/utils/closers"
 )
 
 type testTransferer struct {
 	tagPather namepath.Pather
 	tags      map[string]core.Digest
-	cas       *store.CAStore
+	store     *disk.Store
 }
 
-// NewTestTransferer creates a Transferer which stores blobs in cas and tags in
-// memory for testing purposes.
-func NewTestTransferer(cas *store.CAStore) ImageTransferer {
+// NewTestTransferer creates a Transferer which stores blobs in store and tags
+// in memory for testing purposes.
+func NewTestTransferer(store *disk.Store) ImageTransferer {
 	tagPather, err := namepath.New("", namepath.DockerTag)
 	if err != nil {
 		panic(err)
@@ -39,25 +44,39 @@ func NewTestTransferer(cas *store.CAStore) ImageTransferer {
 	return &testTransferer{
 		tagPather: tagPather,
 		tags:      make(map[string]core.Digest),
-		cas:       cas,
+		store:     store,
 	}
 }
 
 // Stat returns blob info from local cache.
 func (t *testTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
-	fi, err := t.cas.GetCacheFileStat(d.Hex())
+	fi, err := t.store.ScopeComplete().Stat(d.Hex())
 	if err != nil {
 		return nil, fmt.Errorf("stat cache file: %w", err)
 	}
 	return core.NewBlobInfo(fi.Size()), nil
 }
 
-func (t *testTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
-	return t.cas.GetCacheFileReader(d.Hex())
+func (t *testTransferer) Download(namespace string, d core.Digest) (storelib.FileReader, error) {
+	return t.store.ScopeComplete().Open(d.Hex())
 }
 
-func (t *testTransferer) Upload(namespace string, d core.Digest, blob store.FileReader) error {
-	return t.cas.CreateCacheFile(d.Hex(), blob)
+// Upload caches blob under d, tolerating re-uploads of an already-cached
+// digest (content-addressed, so a collision is always the same bytes).
+func (t *testTransferer) Upload(namespace string, d core.Digest, blob storelib.FileReader) error {
+	f, err := t.store.Create(d.Hex(), 1)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return nil
+		}
+		return fmt.Errorf("create cache file: %w", err)
+	}
+	_, err = io.Copy(f, blob)
+	closers.Close(f)
+	if err != nil {
+		return fmt.Errorf("write content: %w", err)
+	}
+	return t.store.MarkComplete(d.Hex())
 }
 
 func (t *testTransferer) GetTag(tag string) (core.Digest, error) {
