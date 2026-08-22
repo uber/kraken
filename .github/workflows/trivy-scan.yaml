@@ -1,0 +1,32 @@
+name: Trivy Scan
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  trivy_scan:
+    name: Trivy Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Trivy
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0
+        with:
+          scan-type: 'fs' 
+          scan-all-sub-directories: true
+          format: 'table' 
+          exit-code: '1' 
+          ignore-unfixed: true
+          security-checks: 'vuln,config,secret' # Customize based on needs
+
+      - name: Upload Trivy Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.*
