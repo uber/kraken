@@ -198,9 +198,11 @@ func (s *store) MarkComplete(key string) error {
 	defer s.mu.Unlock()
 
 	if _, ok := s.mem.ScopeComplete().Has(key); ok {
+		s.log.Warn("MarkComplete called on the same blob. Could point to client misuse of tiered.Store")
 		return nil // no-op
 	}
 	if _, ok := s.disk.ScopeComplete().Has(key); ok {
+		s.log.Warn("MarkComplete called on the same blob. Could point to client misuse of tiered.Store")
 		return nil // no-op
 	}
 
