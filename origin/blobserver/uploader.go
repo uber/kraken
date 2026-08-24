@@ -21,6 +21,7 @@ import (
 
 	"github.com/docker/distribution/uuid"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/tiered"
 	"github.com/uber/kraken/utils/closers"
@@ -38,7 +39,7 @@ func newUploader(store *disk.Store) *uploader {
 }
 
 func (u *uploader) start(d core.Digest, size uint64) (uid string, err error) {
-	if _, ok := u.store.Has(d.Hex()); ok {
+	if _, ok := u.store.ScopeComplete().Has(d.Hex()); ok {
 		log.With("digest", d.Hex()).Debug("Blob already exists, cannot start new upload")
 		return "", handler.ErrorStatus(http.StatusConflict)
 	}
@@ -133,11 +134,10 @@ func (u *transferUploader) start(d core.Digest, size uint64) (uid string, err er
 func (u *transferUploader) patch(
 	d core.Digest, uid string, chunk io.Reader, start, end int64,
 ) error {
-	_, ok := u.store.ScopeComplete().Has(d.Hex())
-	if ok {
+	f, err := u.store.ScopeIncomplete().Open(d.Hex())
+	if errors.Is(err, store.ErrOutOfScope) {
 		return handler.ErrorStatus(http.StatusConflict)
 	}
-	f, err := u.store.ScopeIncomplete().Open(d.Hex())
 	if errors.Is(err, os.ErrNotExist) {
 		log.With("digest", d.Hex(), "uid", uid).Warn("Incomplete file not found")
 		return handler.ErrorStatus(http.StatusNotFound)

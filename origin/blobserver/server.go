@@ -39,6 +39,7 @@ import (
 	"github.com/uber/kraken/lib/middleware"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
+	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/lib/store/tiered"
@@ -241,7 +242,7 @@ func (s *Server) stat(namespace string, d core.Digest, checkLocal bool) (*core.B
 		log.With("namespace", namespace, "digest", d.Hex(), "size", size).Debug("Found blob in local cache")
 		return core.NewBlobInfo(size), nil
 	}
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
 		if !checkLocal {
 			log.With("namespace", namespace, "digest", d.Hex()).Debug("Blob not in local cache, checking backend")
 			client, err := s.backends.GetClient(namespace)
@@ -327,7 +328,7 @@ func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request
 func (s *Server) replicateToRemote(ctx context.Context, namespace string, d core.Digest, remoteDNS string) error {
 	start := time.Now()
 	size, err := s.tieredStore.ScopeComplete().Stat(d.Hex())
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
 		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS).Info("Blob not in cache, starting remote download")
 		return s.startRemoteBlobDownload(namespace, d, false)
 	}
@@ -465,12 +466,12 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	var tm metadata.TorrentMeta
 	ok, err := s.tieredStore.ScopeComplete().GetMetadata(d.Hex(), &tm)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, store.ErrOutOfScope) {
 		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("get metadata: %s", err)).
 			Errorf("Failed to get metainfo")
 		return nil, handler.Errorf("get metadata: %s", err)
 	}
-	if errors.Is(err, os.ErrNotExist) || !ok {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) || !ok {
 		log.With("namespace", namespace, "digest", d.Hex()).Debug("Metainfo not found in cache, initiating blob download")
 		return nil, s.startRemoteBlobDownload(namespace, d, true)
 	}
@@ -583,7 +584,7 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 // return a "202 Accepted" handler error.
 func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
 	f, err := s.tieredStore.ScopeComplete().Open(d.Hex())
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
 		log.With("namespace", namespace, "digest", d.Hex()).
 			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
@@ -613,13 +614,12 @@ func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
 	log.With("namespace", namespace, "digest", d.Hex()).
 		Info("Blob not in cache, initiating download from backend")
 	return s.startRemoteBlobDownload(namespace, d, true)
-
 }
 
 func (s *Server) deleteBlob(d core.Digest) error {
 	if err := s.tieredStore.ScopeComplete().Delete(d.Hex()); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			log.With("digest", d.Hex()).Warn("Attempted to delete non-existent blob")
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
+			log.With("digest", d.Hex()).Warn("Attempted to delete non-existent/incomplete blob")
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
 		log.With("digest", d.Hex()).Errorf("Failed to delete complete blob: %s", err)
@@ -646,7 +646,9 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 	}
 	uid, err := s.transferUploader.start(d, size)
 	if err != nil {
-		log.With("digest", d.Hex()).Errorf("Failed to start upload: %s", err)
+		if !httputil.IsConflict(err) {
+			log.With("digest", d.Hex()).Errorf("Failed to start upload: %s", err)
+		}
 		return err
 	}
 	setUploadLocation(w, uid)

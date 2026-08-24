@@ -280,6 +280,7 @@ func (s *store) MarkComplete(key string) error {
 		return os.ErrNotExist
 	}
 	if b.complete {
+		s.log.Warn("MarkComplete called on the same blob. Could point to client misuse of disk.Store")
 		// no-op
 		return nil
 	}
@@ -651,6 +652,7 @@ func (s *store) Clean(targetUtilPercent int, respectEvictionBan bool) (newUtil i
 
 	targetSize := s.capacity * uint64(targetUtilPercent) / 100
 	requiredFreeSpace := s.capacity - targetSize
+	defer s.emitUsageMetrics()
 
 	err = s.ensureFreeSpace(requiredFreeSpace)
 	if err != nil && !errors.Is(err, errNoSpace) {

@@ -23,6 +23,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/persistedretry"
+	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
@@ -91,7 +92,7 @@ func (e *Executor) Exec(r persistedretry.Task) error {
 	}
 
 	err := e.fs.UnbanEviction(t.Name)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, store.ErrOutOfScope) {
 		log.WithTraceContext(ctx).With(
 			"namespace", t.Namespace,
 			"name", t.Name,
@@ -159,7 +160,7 @@ func (e *Executor) upload(ctx context.Context, t *Task) error {
 	}
 
 	f, err := e.fs.Open(t.Name)
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
 		// Nothing we can do about this but make noise and drop the task.
 		e.stats.Counter("missing_files").Inc(1)
 		log.WithTraceContext(ctx).With(

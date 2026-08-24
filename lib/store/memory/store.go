@@ -224,6 +224,7 @@ func (s *store) MarkComplete(key string) error {
 	}
 	if b.complete {
 		// no-op
+		s.log.Warn("MarkComplete called on the same blob. Could point to client misuse of memory.Store")
 		return nil
 	}
 
