@@ -26,6 +26,8 @@ type Store struct {
 
 // NewStore creates a new [Store] and returns its underlying [disk.Store] in case the
 // user wants to directly operate on disk (e.g. if persistence is mandatory).
+// Each blob should be accessed through either [Store] or [disk.Store]'s APIs but not
+// both at the same time, as otherwise undefined behavior may occur due to messing up [tiered.Store]'s internal state.
 func NewStore(config *Config, stats tally.Scope) (*Store, *disk.Store, error) {
 	impl, diskStore, err := newStore(config, stats)
 	if err != nil {
