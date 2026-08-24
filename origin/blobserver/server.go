@@ -73,6 +73,7 @@ type Server struct {
 	blobRefresher     *blobrefresh.Refresher
 	metaInfoGenerator *metainfogen.Generator
 	uploader          *uploader
+	transferUploader  *transferUploader
 	writeBackManager  persistedretry.Manager
 	tracer            trace.Tracer
 
@@ -121,6 +122,7 @@ func New(
 		blobRefresher:     blobRefresher,
 		metaInfoGenerator: metaInfoGenerator,
 		uploader:          newUploader(diskStore),
+		transferUploader:  newTransferUploader(tieredStore),
 		writeBackManager:  writeBackManager,
 		tracer:            otel.Tracer("kraken-origin"),
 		pctx:              pctx,
@@ -642,7 +644,7 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 		log.With("digest", d.Hex()).Debug("Blob already exists, returning conflict")
 		return handler.ErrorStatus(http.StatusConflict)
 	}
-	uid, err := s.uploader.start(d, size)
+	uid, err := s.transferUploader.start(d, size)
 	if err != nil {
 		log.With("digest", d.Hex()).Errorf("Failed to start upload: %s", err)
 		return err
@@ -668,7 +670,7 @@ func (s *Server) patchTransferHandler(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 	log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Patching transfer upload chunk")
-	if err := s.uploader.patch(d, uid, r.Body, start, end); err != nil {
+	if err := s.transferUploader.patch(d, uid, r.Body, start, end); err != nil {
 		log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end).Errorf("Failed to patch upload: %s", err)
 		return err
 	}
@@ -688,7 +690,7 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 		return err
 	}
 	log.With("digest", d.Hex(), "uid", uid).Info("Committing internal transfer upload")
-	if err := s.uploader.commit(d, uid); err != nil {
+	if err := s.transferUploader.commit(d, uid); err != nil {
 		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to commit upload: %s", err)
 		return err
 	}
