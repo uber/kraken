@@ -16,6 +16,7 @@ package blobrefresh
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/uber/kraken/core"
@@ -107,18 +108,10 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 
 	id := d.Hex()
 	err = r.requests.Start(id, func() error {
-		start := time.Now()
 		err := r.download(client, namespace, d, size.Bytes())
 		if err != nil {
 			return err
 		}
-		downloadLatency := time.Since(start)
-		observability.EmitDownloadPerformance(r.stats, observability.REMOTE_DOWNLOAD, info.Size, downloadLatency)
-		log.With(
-			"namespace", namespace,
-			"name", d.Hex(),
-			"blob_size", size.String(),
-			"download_time", downloadLatency).Info("Downloaded remote blob")
 		for _, h := range hooks {
 			h.Run(d)
 		}
@@ -137,8 +130,17 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 }
 
 func (r *Refresher) download(client backend.Client, namespace string, d core.Digest, size uint64) error {
+	start := time.Now()
 	name := d.Hex()
 	f, err := r.store.Create(d.Hex(), size)
+	if errors.Is(err, os.ErrExist) {
+		_, complete := r.store.ScopeComplete().Has(d.Hex())
+		if complete {
+			// No-op, the blob was already downloaded. While Refresher dedups requests for the same blob, it's possible
+			return nil
+		}
+		return errors.New("invariant violation - blob unexpectedly found incomplete in store")
+	}
 	if err != nil {
 		return fmt.Errorf("store create: %w", err)
 	}
@@ -157,5 +159,12 @@ func (r *Refresher) download(client backend.Client, namespace string, d core.Dig
 		return fmt.Errorf("generate and store metainfo: %w", err)
 	}
 
+	downloadLatency := time.Since(start)
+	observability.EmitDownloadPerformance(r.stats, observability.REMOTE_DOWNLOAD, int64(size), downloadLatency)
+	log.With(
+		"namespace", namespace,
+		"name", d.Hex(),
+		"blob_size", size,
+		"download_time", downloadLatency).Info("Downloaded remote blob")
 	return nil
 }

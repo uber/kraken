@@ -147,7 +147,6 @@ func (u *uploader) putBlobContent(path string, content []byte) error {
 		return fmt.Errorf("create cache file: %w", err)
 	}
 	if err == nil {
-		// skipped on os.ErrExist
 		_, err = io.Copy(f, bytes.NewReader(content))
 		closers.Close(f)
 		if err != nil {
