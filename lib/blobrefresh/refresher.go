@@ -131,26 +131,29 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 
 func (r *Refresher) download(client backend.Client, namespace string, d core.Digest, size uint64) error {
 	start := time.Now()
-	name := d.Hex()
 	f, err := r.store.Create(d.Hex(), size)
 	if errors.Is(err, os.ErrExist) {
-		_, complete := r.store.ScopeComplete().Has(d.Hex())
-		if complete {
-			// No-op, the blob was already downloaded. While Refresher dedups requests for the same blob, it's possible
+		if _, complete := r.store.ScopeComplete().Has(d.Hex()); complete {
+			// No-op - the blob is already downloaded by either a previous refresher request or origin blob replication.
 			return nil
 		}
-		return errors.New("invariant violation - blob unexpectedly found incomplete in store")
+		// The blob is being replicated from other origins. We need to wait.
+		// If replication fails halfway-through, the disk.Store's leak collector will
+		// remove it after a while, failing open. Until then, we will continue returning ErrPending.
+		return ErrPending
 	}
 	if err != nil {
 		return fmt.Errorf("store create: %w", err)
 	}
 	defer closers.Close(f)
-	err = client.Download(namespace, name, f)
+	err = client.Download(namespace, d.Hex(), f)
 	if err != nil {
+		r.abortDownload(namespace, d)
 		return fmt.Errorf("client download: %w", err)
 	}
 	err = r.store.MarkComplete(d.Hex())
 	if err != nil {
+		r.abortDownload(namespace, d)
 		return fmt.Errorf("mark complete: %w", err)
 	}
 
@@ -167,4 +170,12 @@ func (r *Refresher) download(client backend.Client, namespace string, d core.Dig
 		"blob_size", size,
 		"download_time", downloadLatency).Info("Downloaded remote blob")
 	return nil
+}
+
+func (r *Refresher) abortDownload(namespace string, d core.Digest) {
+	err := r.store.ScopeIncomplete().Delete(d.Hex())
+	if err != nil {
+		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
+			Error("Leaked blob to disk.Store - failed to clean incomplete blob from disk after failed download")
+	}
 }

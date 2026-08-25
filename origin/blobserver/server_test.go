@@ -526,6 +526,55 @@ func TestTransferBlobSmallChunkSize(t *testing.T) {
 	ensureHasBlob(t, client, namespace, blob)
 }
 
+
+func TestDownloadBlobPendingWhileTransferInProgress(t *testing.T) {
+	require := require.New(t)
+
+	cp := newTestClientProvider()
+	s := newTestServer(t, master1, hashRingMaxReplica(), cp)
+	defer s.cleanup()
+
+	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
+	size := uint64(len(blob.Content))
+
+	backendClient := s.backendClient(namespace, false)
+	backendClient.EXPECT().Stat(namespace, blob.Digest.Hex()).
+		Return(core.NewBlobInfo(int64(size)), nil).AnyTimes()
+
+	// Start of an internal transfer landing on this server -- e.g. a peer
+	// origin pushing a blob it just pulled from the backend. Deliberately not
+	// patching/committing yet, so the digest sits open as incomplete.
+	startResp, err := httputil.Post(
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads?size=%d", s.addr, blob.Digest, size))
+	require.NoError(err)
+	uid := startResp.Header.Get("Location")
+	require.NotEmpty(uid)
+
+	// While the transfer is mid-flight, an unrelated download of the same
+	// digest must keep getting told to retry (202), not fail.
+	for i := 0; i < 20; i++ {
+		err := cp.Provide(master1).DownloadBlob(context.Background(), namespace, blob.Digest, io.Discard)
+		require.True(httputil.IsAccepted(err), "attempt %d: expected 202 Accepted, got %v", i, err)
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	_, err = httputil.Patch(
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/%s", s.addr, blob.Digest, uid),
+		httputil.SendBody(bytes.NewReader(blob.Content)),
+		httputil.SendHeaders(map[string]string{
+			"Content-Range": fmt.Sprintf("%d-%d", 0, size),
+		}))
+	require.NoError(err)
+	_, err = httputil.Put(
+		fmt.Sprintf("http://%s/internal/blobs/%s/uploads/%s", s.addr, blob.Digest, uid))
+	require.NoError(err)
+
+	// Once the transfer has committed, downloads succeed with the correct
+	// content.
+	ensureHasBlob(t, cp.Provide(master1), namespace, blob)
+}
+
 func TestOverwriteMetainfo(t *testing.T) {
 	require := require.New(t)
 

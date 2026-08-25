@@ -14,6 +14,7 @@
 package blobrefresh
 
 import (
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/lib/store/tiered"
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/testutil"
 )
@@ -147,6 +149,95 @@ func TestRefreshSizeLimitWithValidSize(t *testing.T) {
 		ok, err := mocks.store.GetMetadata(blob.Digest.Hex(), &tm)
 		return err == nil && ok
 	}))
+}
+
+func TestDownloadNoopsWhenBlobAlreadyComplete(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newRefresherMocks(t)
+	defer cleanup()
+
+	refresher := mocks.new()
+
+	namespace := core.TagFixture()
+	client := mocks.newClient(namespace)
+
+	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
+	size := uint64(len(blob.Content))
+
+	// Simulate the blob having already been fully written by a concurrent
+	// caller (e.g. another Refresh call, or a peer origin's TransferBlob)
+	// between our caller's initial cache-miss check and this call.
+	f, err := mocks.store.Create(blob.Digest.Hex(), size)
+	require.NoError(err)
+	closers.Close(f)
+	require.NoError(mocks.store.MarkComplete(blob.Digest.Hex()))
+
+	require.NoError(refresher.download(client, namespace, blob.Digest, size))
+}
+
+func TestDownloadReturnsPendingWhenBlobExistsIncomplete(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newRefresherMocks(t)
+	defer cleanup()
+
+	refresher := mocks.new()
+
+	namespace := core.TagFixture()
+	client := mocks.newClient(namespace)
+
+	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
+	size := uint64(len(blob.Content))
+
+	// Simulate another writer -- e.g. a peer origin's in-progress TransferBlob,
+	// or a prior attempt that died without cleaning up -- holding this digest
+	// open as incomplete. download() cannot distinguish these cases and must
+	// not treat either as fatal.
+	f, err := mocks.store.Create(blob.Digest.Hex(), size)
+	require.NoError(err)
+	closers.Close(f)
+
+	err = refresher.download(client, namespace, blob.Digest, size)
+	require.Equal(ErrPending, err)
+
+	// The entry belongs to whoever is writing it; download() must not touch it.
+	_, complete := mocks.store.ScopeComplete().Has(blob.Digest.Hex())
+	require.False(complete)
+}
+
+func TestDownloadDeletesIncompleteBlobOnClientDownloadFailure(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newRefresherMocks(t)
+	defer cleanup()
+
+	refresher := mocks.new()
+
+	namespace := core.TagFixture()
+	client := mocks.newClient(namespace)
+
+	blob := core.SizedBlobFixture(100, uint64(_testPieceLength))
+	size := uint64(len(blob.Content))
+
+	client.EXPECT().Download(namespace, blob.Digest.Hex(), gomock.Any()).Return(errors.New("some backend error"))
+
+	err := refresher.download(client, namespace, blob.Digest, size)
+	require.Error(err)
+
+	// The incomplete blob left behind by the failed download must be cleaned
+	// up immediately, rather than sitting stuck until the leak cleaner runs.
+	inStore, _ := mocks.store.Has(blob.Digest.Hex())
+	require.False(inStore)
+
+	// A retry now succeeds instead of hitting the digest as "already exists".
+	client.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).DoAndReturn(
+		func(_ string, _ string, w io.Writer) error {
+			_, err := w.Write(blob.Content)
+			return err
+		},
+	)
+	require.NoError(refresher.download(client, namespace, blob.Digest, size))
 }
 
 func TestDedupSameBlobWithDifferentNamespaces(t *testing.T) {
