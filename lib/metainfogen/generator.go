@@ -43,7 +43,7 @@ func (g *Generator) Generate(d core.Digest) error {
 		return fmt.Errorf("cache stat: %s", err)
 	}
 	pieceLength := g.pieceLengthConfig.get(info.Size())
-	return g.cas.GenerateCacheFileMetaInfo(d, pieceLength)
+	return g.cas.GenerateMetadataFromFile(d.Hex(), pieceLength)
 }
 
 // Get the piece length for the blob

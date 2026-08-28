@@ -223,7 +223,7 @@ func (s *CAStore) writeCacheFile(name string, write func(w FileReadWriter) error
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}
 	if addMetadata {
-		return s.generateMetadataFromFile(name, pieceLength)
+		return s.GenerateMetadataFromFile(name, pieceLength)
 	}
 	return nil
 }
@@ -305,18 +305,14 @@ func (s *CAStore) generateMetadataFromBytes(name string, data []byte, pieceLengt
 	return metaInfo, nil
 }
 
-func (s *CAStore) generateMetadataFromFile(name string, pieceLength int64) error {
+// GenerateMetadataFromFile generates metainfo for a cached file and writes it
+// alongside the cache file.
+func (s *CAStore) GenerateMetadataFromFile(name string, pieceLength int64) error {
 	d, err := core.NewSHA256DigestFromHex(name)
 	if err != nil {
 		return fmt.Errorf("get digest from file: %w", err)
 	}
-	return s.GenerateCacheFileMetaInfo(d, pieceLength)
-}
-
-// GenerateCacheFileMetaInfo generates torrent metainfo for a cached blob
-// and persists it alongside the cache file.
-func (s *CAStore) GenerateCacheFileMetaInfo(d core.Digest, pieceLength int64) error {
-	f, err := s.GetCacheFileReader(d.Hex())
+	f, err := s.GetCacheFileReader(name)
 	if err != nil {
 		return fmt.Errorf("get cache file: %w", err)
 	}
