@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 )
 
 const (
@@ -43,7 +44,7 @@ func TestLimiterInvalidConfig(t *testing.T) {
 		IngressBitsPerSec: bps,
 		TokenSize:         1,
 		Enable:            true,
-	})
+	}, tally.NoopScope)
 	require.Error(err)
 
 	_, err = NewLimiter(Config{
@@ -51,7 +52,7 @@ func TestLimiterInvalidConfig(t *testing.T) {
 		IngressBitsPerSec: 0,
 		TokenSize:         1,
 		Enable:            true,
-	})
+	}, tally.NoopScope)
 	require.Error(err)
 }
 
@@ -65,7 +66,7 @@ func TestLimiterDisabled(t *testing.T) {
 		IngressBitsPerSec: bps,
 		TokenSize:         1,
 		Enable:            false,
-	})
+	}, tally.NoopScope)
 	require.NoError(err)
 	require.Nil(l.egress)
 	require.Nil(l.ingress)
@@ -87,7 +88,7 @@ func TestLimiterReserveConcurrency(t *testing.T) {
 				IngressBitsPerSec: bps,
 				TokenSize:         1,
 				Enable:            true,
-			})
+			}, tally.NoopScope)
 			require.NoError(err)
 
 			// This test starts a bunch of goroutines and see how many bytes
@@ -143,7 +144,7 @@ func TestLimiterReserveBytesTokenScaling(t *testing.T) {
 				IngressBitsPerSec: bps,
 				TokenSize:         10, // Bucket has 8 tokens.
 				Enable:            true,
-			})
+			}, tally.NoopScope)
 			require.NoError(err)
 
 			start := time.Now()
@@ -171,7 +172,7 @@ func TestLimiterReserveBytesSmallerThanTokenSize(t *testing.T) {
 				IngressBitsPerSec: bps,
 				TokenSize:         10, // Bucket has 8 tokens.
 				Enable:            true,
-			})
+			}, tally.NoopScope)
 			require.NoError(err)
 
 			start := time.Now()
@@ -200,12 +201,32 @@ func TestLimiterReserveErrorWhenBytesLargerThanBucket(t *testing.T) {
 				IngressBitsPerSec: bps,
 				TokenSize:         10, // Bucket has 8 tokens.
 				Enable:            true,
-			})
+			}, tally.NoopScope)
 			require.NoError(err)
 
 			require.Error(reserve(l, 12, direction))
 		})
 	}
+}
+
+func TestLimiterReserveRecordsSleepDuration(t *testing.T) {
+	require := require.New(t)
+
+	testScope := tally.NewTestScope("", nil)
+	l, err := NewLimiter(Config{
+		EgressBitsPerSec:  160,
+		IngressBitsPerSec: 160,
+		TokenSize:         8,
+		Enable:            true,
+	}, testScope)
+	require.NoError(err)
+	require.NoError(l.ReserveEgress(20)) // 0 delay.
+	require.NoError(l.ReserveEgress(10)) // ~500ms delay.
+	histograms := testScope.Snapshot().Histograms()
+	histogram, ok := histograms["throttle_sleep_duration+direction=egress,module=bandwidth"]
+	require.True(ok)
+	require.Equal(int64(1), histogram.Durations()[_sleepDurationBuckets[0]])
+	require.Equal(int64(1), histogram.Durations()[_sleepDurationBuckets[1]])
 }
 
 func TestLimiterAdjustError(t *testing.T) {
@@ -216,7 +237,7 @@ func TestLimiterAdjustError(t *testing.T) {
 		IngressBitsPerSec: 10,
 		TokenSize:         1,
 		Enable:            true,
-	})
+	}, tally.NoopScope)
 	require.NoError(err)
 	require.Error(l.Adjust(0))
 }
@@ -229,7 +250,7 @@ func TestLimiterAdjust(t *testing.T) {
 		IngressBitsPerSec: 10,
 		TokenSize:         1,
 		Enable:            true,
-	})
+	}, tally.NoopScope)
 	require.NoError(err)
 
 	// No subtests since we want to ensure the calls don't affect each other.

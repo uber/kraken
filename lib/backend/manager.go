@@ -88,7 +88,8 @@ func NewManager(managerConfig ManagerConfig, configs []Config, auth AuthConfig, 
 		}
 
 		if config.Bandwidth.Enable {
-			l, err := bandwidth.NewLimiter(config.Bandwidth)
+			l, err := bandwidth.NewLimiter(
+				config.Bandwidth, stats.Tagged(map[string]string{"namespace": config.Namespace}))
 			if err != nil {
 				return nil, fmt.Errorf("bandwidth: %s", err)
 			}
