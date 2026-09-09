@@ -21,21 +21,29 @@ import (
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/memsize"
 
+	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
+const _sleepDurationMetric = "throttle_sleep_duration"
+
+var _sleepDurationBuckets = append(
+	tally.DurationBuckets{0},
+	tally.MustMakeExponentialDurationBuckets(5*time.Second, 2, 7)...)
+
 // Config defines Limiter configuration.
 type Config struct {
-	EgressBitsPerSec  uint64 `yaml:"egress_bits_per_sec"`
+	// When used in origin, the limit applies to the WHOLE HASHRING'S THROUGHPUT and is NOT per origin,
+	// i.e. each origin has a limit of configured_throughput/num_origins.
+	EgressBitsPerSec uint64 `yaml:"egress_bits_per_sec"`
+	// Check the comment under [Config.EgressBitsPerSec].
 	IngressBitsPerSec uint64 `yaml:"ingress_bits_per_sec"`
-
 	// TokenSize defines the granularity of a token in the bucket. It is used to
 	// avoid integer overflow errors that would occur if we mapped each bit to a
 	// token.
 	TokenSize uint64 `yaml:"token_size"`
-
-	Enable bool `yaml:"enable"`
+	Enable    bool   `yaml:"enable"`
 }
 
 func (c Config) applyDefaults() Config {
@@ -51,6 +59,7 @@ type Limiter struct {
 	egress  *rate.Limiter
 	ingress *rate.Limiter
 	logger  *zap.SugaredLogger
+	stats   tally.Scope
 }
 
 // Option allows setting optional parameters in Limiter.
@@ -62,12 +71,13 @@ func WithLogger(logger *zap.SugaredLogger) Option {
 }
 
 // NewLimiter creates a new Limiter.
-func NewLimiter(config Config, opts ...Option) (*Limiter, error) {
+func NewLimiter(config Config, stats tally.Scope, opts ...Option) (*Limiter, error) {
 	config = config.applyDefaults()
 
 	l := &Limiter{
 		config: config,
 		logger: log.Default(),
+		stats:  stats.Tagged(map[string]string{"module": "bandwidth"}),
 	}
 	for _, opt := range opts {
 		opt(l)
@@ -97,7 +107,7 @@ func NewLimiter(config Config, opts ...Option) (*Limiter, error) {
 	return l, nil
 }
 
-func (l *Limiter) reserve(rl *rate.Limiter, nbytes int64) error {
+func (l *Limiter) reserve(rl *rate.Limiter, nbytes int64, direction string) error {
 	if !l.config.Enable {
 		return nil
 	}
@@ -112,20 +122,23 @@ func (l *Limiter) reserve(rl *rate.Limiter, nbytes int64) error {
 			memsize.Format(uint64(nbytes)),
 			memsize.BitFormat(l.config.TokenSize*uint64(rl.Burst())))
 	}
-	time.Sleep(r.Delay())
+	delay := r.Delay()
+	l.stats.Tagged(map[string]string{"direction": direction}).
+		Histogram(_sleepDurationMetric, _sleepDurationBuckets).RecordDuration(delay)
+	time.Sleep(delay)
 	return nil
 }
 
 // ReserveEgress blocks until egress bandwidth for nbytes is available.
 // Returns error if nbytes is larger than the maximum egress bandwidth.
 func (l *Limiter) ReserveEgress(nbytes int64) error {
-	return l.reserve(l.egress, nbytes)
+	return l.reserve(l.egress, nbytes, "egress")
 }
 
 // ReserveIngress blocks until ingress bandwidth for nbytes is available.
 // Returns error if nbytes is larger than the maximum ingress bandwidth.
 func (l *Limiter) ReserveIngress(nbytes int64) error {
-	return l.reserve(l.ingress, nbytes)
+	return l.reserve(l.ingress, nbytes, "ingress")
 }
 
 // Adjust divides the originally configured egress and ingress bps by denominator.

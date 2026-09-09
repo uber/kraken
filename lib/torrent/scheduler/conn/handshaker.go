@@ -210,7 +210,7 @@ func NewHandshaker(
 		"module": "conn",
 	})
 
-	bl, err := bandwidth.NewLimiter(config.Bandwidth, bandwidth.WithLogger(logger))
+	bl, err := bandwidth.NewLimiter(config.Bandwidth, stats, bandwidth.WithLogger(logger))
 	if err != nil {
 		return nil, fmt.Errorf("bandwidth: %s", err)
 	}
