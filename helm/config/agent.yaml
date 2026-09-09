@@ -2,3 +2,7 @@ extends: /etc/kraken/config/agent/base.yaml
 {{ include "tls" . }}
 {{ include "trackers" . }}
 {{ include "build-index" . }}
+{{- with .Values.agent.allowedCidrs }}
+allowed_cidrs:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
