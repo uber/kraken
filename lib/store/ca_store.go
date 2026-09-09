@@ -223,7 +223,7 @@ func (s *CAStore) writeCacheFile(name string, write func(w FileReadWriter) error
 		return fmt.Errorf("move upload file to cache: %s", err)
 	}
 	if addMetadata {
-		return s.generateMetadataFromFile(name, pieceLength)
+		return s.GenerateMetadataFromFile(name, pieceLength)
 	}
 	return nil
 }
@@ -305,7 +305,9 @@ func (s *CAStore) generateMetadataFromBytes(name string, data []byte, pieceLengt
 	return metaInfo, nil
 }
 
-func (s *CAStore) generateMetadataFromFile(name string, pieceLength int64) error {
+// GenerateMetadataFromFile generates metainfo for a cached file and writes it
+// alongside the cache file.
+func (s *CAStore) GenerateMetadataFromFile(name string, pieceLength int64) error {
 	d, err := core.NewSHA256DigestFromHex(name)
 	if err != nil {
 		return fmt.Errorf("get digest from file: %w", err)
@@ -314,6 +316,7 @@ func (s *CAStore) generateMetadataFromFile(name string, pieceLength int64) error
 	if err != nil {
 		return fmt.Errorf("get cache file: %w", err)
 	}
+	defer closers.Close(f)
 	mi, err := core.NewMetaInfo(d, f, pieceLength)
 	if err != nil {
 		return fmt.Errorf("create metainfo: %w", err)
