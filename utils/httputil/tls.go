@@ -86,11 +86,10 @@ func (c *TLSConfig) BuildClient() (*tls.Config, error) {
 		certs = []tls.Certificate{cert}
 	}
 	c.tls = &tls.Config{
-		Certificates:             certs,
-		RootCAs:                  caPool,
-		ServerName:               c.Name,
-		PreferServerCipherSuites: true,
-		InsecureSkipVerify:       false, // This is important to enforce verification of server.
+		Certificates:       certs,
+		RootCAs:            caPool,
+		ServerName:         c.Name,
+		InsecureSkipVerify: false, // This is important to enforce verification of server.
 	}
 	return c.tls, nil
 }
