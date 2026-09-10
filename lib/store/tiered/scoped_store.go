@@ -26,6 +26,8 @@ type Store struct {
 
 // NewStore creates a new [Store] and returns its underlying [disk.Store] in case the
 // user wants to directly operate on disk (e.g. if persistence is mandatory).
+// Each blob should be accessed through either [Store] or [disk.Store]'s APIs but not
+// both at the same time, as otherwise undefined behavior may occur due to messing up [tiered.Store]'s internal state.
 func NewStore(config *Config, stats tally.Scope) (*Store, *disk.Store, error) {
 	impl, diskStore, err := newStore(config, stats)
 	if err != nil {
@@ -80,6 +82,13 @@ func (s *Store) GetMetadata(key string, md metadata.Metadata) (ok bool, err erro
 // DeleteMetadata removes a blob's metadata. No-op if the md is not present.
 func (s *Store) DeleteMetadata(key string, mdSuffix string) error {
 	return s.impl.DeleteMetadata(key, mdSuffix, s.scope)
+}
+
+// Close blocks until all dirty items are flushed.
+// Items marked as dirty after calling close may or may not be flushed,
+// thus Close is intended for testing, not application shutdown.
+func (s *Store) Close() {
+	s.impl.Close()
 }
 
 // ScopeComplete scopes [Store]'s APIs such that they can only operate on complete blobs.

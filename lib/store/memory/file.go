@@ -14,7 +14,7 @@ var _ storelib.FileReadWriter = &File{}
 // As soon as the blob is evicted, File's APIs starts returning [ErrEvicted], as File no longer has a reference to its data, ensuring GC can clean it.
 type File struct {
 	data    *[]byte
-	sliceMu *sync.RWMutex // A potential optimization if contention is too high: currently no writes are parallelized. However, writes that only sliceMutate the array but not the slice are parallelizable with each other.
+	sliceMu *sync.RWMutex // A potential optimization if contention is too high: currently no writes are parallelized. However, writes that only mutate the array but not the slice are parallelizable with each other.
 	off     int64
 }
 

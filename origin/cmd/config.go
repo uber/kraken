@@ -22,7 +22,7 @@ import (
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/metainfogen"
 	"github.com/uber/kraken/lib/persistedretry"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/tiered"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/localdb"
@@ -43,7 +43,7 @@ type Config struct {
 	HashRing       hashring.Config          `yaml:"hashring"`
 	HealthCheck    healthcheck.FilterConfig `yaml:"healthcheck"`
 	BlobServer     blobserver.Config        `yaml:"blobserver"`
-	CAStore        store.CAStoreConfig      `yaml:"castore"`
+	BlobStore      tiered.Config            `yaml:"blobstore"`
 	Scheduler      scheduler.Config         `yaml:"scheduler"`
 	NetworkEvent   networkevent.Config      `yaml:"network_event"`
 	PeerIDFactory  core.PeerIDFactory       `yaml:"peer_id_factory"`

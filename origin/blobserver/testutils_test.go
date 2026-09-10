@@ -33,8 +33,8 @@ import (
 	"github.com/uber/kraken/lib/healthcheck"
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/metainfogen"
-	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
+	"github.com/uber/kraken/lib/store/tiered"
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 	mockpersistedretry "github.com/uber/kraken/mocks/lib/persistedretry"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
@@ -97,7 +97,7 @@ type testServer struct {
 	ctrl             *gomock.Controller
 	host             string
 	addr             string
-	cas              *store.CAStore
+	tieredStore      *tiered.Store
 	cp               *testClientProvider
 	clusterProvider  *mockblobclient.MockClusterProvider
 	pctx             core.PeerContext
@@ -105,42 +105,50 @@ type testServer struct {
 	writeBackManager *mockpersistedretry.MockManager
 	clk              *clock.Mock
 	cleanup          func()
-
-	// setDiskStore configures the Server's disk.Store. There's no way to inject
-	// this via New yet (migration to disk.Store is in progress), so this closure
-	// captures the Server built below to allow tests to still wire it in.
-	setDiskStore func(*disk.Store)
 }
 
 func newTestServer(
 	t *testing.T, host string, ring hashring.Ring, cp *testClientProvider,
 ) *testServer {
+	tieredStore, diskStore := tiered.StoreFixture(t)
+	return newTestServerWithStores(t, host, ring, cp, tieredStore, diskStore)
+}
+
+// newTestServerWithDiskStore is like newTestServer, but lets the caller
+// override the disk.Store.
+func newTestServerWithDiskStore(
+	t *testing.T, host string, ring hashring.Ring, cp *testClientProvider, diskStore *disk.Store,
+) *testServer {
+	tieredStore, _ := tiered.StoreFixture(t)
+	return newTestServerWithStores(t, host, ring, cp, tieredStore, diskStore)
+}
+
+func newTestServerWithStores(
+	t *testing.T, host string, ring hashring.Ring, cp *testClientProvider,
+	tieredStore *tiered.Store, diskStore *disk.Store,
+) *testServer {
 	var cleanup testutil.Cleanup
 	defer cleanup.Recover()
 
 	ctrl := gomock.NewController(t)
-	cleanup.Add(ctrl.Finish)
 
 	clusterProvider := mockblobclient.NewMockClusterProvider(ctrl)
 
 	pctx := core.PeerContextFixture()
 
-	cas, c := store.CAStoreFixture()
-	cleanup.Add(c)
-
 	bm := backend.ManagerFixture()
 
 	writeBackManager := mockpersistedretry.NewMockManager(ctrl)
 
-	mg := metainfogen.Fixture(cas, 4)
+	mg := metainfogen.Fixture(tieredStore, 4)
 
-	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, cas, bm, mg)
+	br := blobrefresh.New(blobrefresh.Config{}, tally.NoopScope, tieredStore, bm, mg)
 
 	clk := clock.NewMock()
 	clk.Set(time.Now())
 
 	s, err := New(
-		Config{}, tally.NoopScope, clk, host, ring, cas, cp, clusterProvider, pctx,
+		Config{}, tally.NoopScope, clk, host, ring, tieredStore, diskStore, cp, clusterProvider, pctx,
 		bm, br, mg, writeBackManager)
 	if err != nil {
 		panic(err)
@@ -155,7 +163,7 @@ func newTestServer(
 		ctrl:             ctrl,
 		host:             host,
 		addr:             addr,
-		cas:              cas,
+		tieredStore:      tieredStore,
 		cp:               cp,
 		clusterProvider:  clusterProvider,
 		pctx:             pctx,
@@ -163,7 +171,6 @@ func newTestServer(
 		writeBackManager: writeBackManager,
 		clk:              clk,
 		cleanup:          cleanup.Run,
-		setDiskStore:     func(d *disk.Store) { s.diskStore = d },
 	}
 }
 

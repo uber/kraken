@@ -20,7 +20,7 @@ import (
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/tagreplication"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/upstream"
 	"github.com/uber/kraken/localdb"
 	"github.com/uber/kraken/metrics"
@@ -45,7 +45,7 @@ type Config struct {
 	LocalDB        localdb.Config               `yaml:"localdb"`
 	Cluster        upstream.ActiveConfig        `yaml:"cluster"`
 	TagStore       tagstore.Config              `yaml:"tag_store"`
-	Store          store.SimpleStoreConfig      `yaml:"store"`
+	Store          disk.Config                  `yaml:"store"`
 	WriteBack      persistedretry.Config        `yaml:"writeback"`
 	Nginx          nginx.Config                 `yaml:"nginx"`
 	TLS            httputil.TLSConfig           `yaml:"tls"`

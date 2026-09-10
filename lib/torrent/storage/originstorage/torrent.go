@@ -19,6 +19,7 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/tiered"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
 
@@ -35,14 +36,14 @@ var (
 // pieces.
 type Torrent struct {
 	metaInfo    *core.MetaInfo
-	cas         *store.CAStore
+	store       *tiered.Store
 	numComplete *atomic.Int32
 }
 
 // NewTorrent creates a new Torrent.
-func NewTorrent(cas *store.CAStore, mi *core.MetaInfo) (*Torrent, error) {
+func NewTorrent(store *tiered.Store, mi *core.MetaInfo) (*Torrent, error) {
 	return &Torrent{
-		cas:         cas,
+		store:       store,
 		metaInfo:    mi,
 		numComplete: atomic.NewInt32(int32(mi.NumPieces())),
 	}, nil
@@ -113,7 +114,7 @@ type opener struct {
 }
 
 func (o *opener) Open() (store.FileReader, error) {
-	return o.torrent.cas.GetCacheFileReader(o.torrent.Digest().Hex())
+	return o.torrent.store.ScopeComplete().Open(o.torrent.Digest().Hex())
 }
 
 // GetPieceReader returns a reader for piece pi.

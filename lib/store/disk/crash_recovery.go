@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/utils/closers"
 	"go.uber.org/zap"
@@ -24,7 +25,7 @@ type rebootedBlob struct {
 	complete  bool
 }
 
-func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Scope) (*store, error) {
+func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Scope, clk clock.Clock) (*store, error) {
 	incompleteDirPath := filepath.Join(config.RootDir, _incompleteSubDir)
 	if !config.RebootIncompleteBlobs {
 		err := os.RemoveAll(incompleteDirPath)
@@ -33,7 +34,7 @@ func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Sc
 		}
 	}
 
-	pather := newPather(config.RootDir, config.ShardLength)
+	pather := newPather(config.RootDir, config.ShardLength, log)
 	keys, err := pather.rebootKeys(_completeBlob)
 	if err != nil {
 		return nil, err
@@ -56,7 +57,7 @@ func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Sc
 			return nil, err
 		}
 		if !ok {
-			log.With("key", key).Warn("Could not reboot blob from disk - its parent directory is there but the blob is missing")
+			log.With("key", key).Warn("Could not reboot blob from disk, failing open by skipping it")
 			continue
 		}
 		if b.complete && b.evictable {
@@ -97,10 +98,13 @@ func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Sc
 	store := &store{
 		blobs:      blobs,
 		evictQueue: evictQueue,
-		capacity:   config.CapacityBytes,
+		capacity:   config.Capacity,
 		size:       storeSize,
 		pather:     pather,
+		stopCh:     make(chan struct{}),
+		doneCh:     make(chan struct{}),
 		config:     config,
+		clk:        clk,
 		log:        log,
 		stats:      stats,
 	}
@@ -113,8 +117,8 @@ func rebootPersistedStore(config *Config, log *zap.SugaredLogger, stats tally.Sc
 			log.With("error", err).Error("Store size exceeds its capacity after service reboot. Evicting blobs from disk did not work to reduce size within capacity.")
 			return nil, fmt.Errorf("remove blobs to reduce store size within configured capacity: %w", err)
 		}
-		evictedBytes := prevSize - store.size
-		log.With("evicted_bytes", evictedBytes).Warn("Store size exceeded its capacity after service reboot. Successfully evicted blobs to reduce size within capacity.")
+		evictedSize := prevSize - store.size
+		log.With("evicted_size", evictedSize).Warn("Store size exceeded its capacity after service reboot. Successfully evicted blobs to reduce size within capacity.")
 	}
 	return store, nil
 }
@@ -135,17 +139,12 @@ func rebootBlob(key string, complete bool, pather *pather) (res *rebootedBlob, o
 	if err != nil {
 		return nil, false, err
 	}
-	var size uint64
-	if complete {
-		size = uint64(fInfo.Size())
-	} else {
-		size, ok, err = rebootIncompleteBlobSize(key, pather)
-		if err != nil {
-			return nil, false, fmt.Errorf("get incomplete blob size from sidecar file: %w", err)
-		}
-		if !ok {
-			return nil, false, nil
-		}
+	size, ok, err := rebootBlobSize(key, complete, pather)
+	if err != nil {
+		return nil, false, fmt.Errorf("get blob size from sidecar file: %w", err)
+	}
+	if !ok {
+		return nil, false, nil
 	}
 	mTime := fInfo.ModTime()
 	return &rebootedBlob{
@@ -157,11 +156,11 @@ func rebootBlob(key string, complete bool, pather *pather) (res *rebootedBlob, o
 	}, true, nil
 }
 
-func rebootIncompleteBlobSize(key string, pather *pather) (size uint64, ok bool, err error) {
-	blobSizeFilePath := pather.sidecarFilePath(key, _incompleteBlob, _blobSizeFileName)
+func rebootBlobSize(key string, complete bool, pather *pather) (size uint64, ok bool, err error) {
+	blobSizeFilePath := pather.sidecarFilePath(key, complete, _blobSizeFileName)
 	blobSizeF, err := os.OpenFile(blobSizeFilePath, os.O_RDONLY, _defaultFilePerm)
 	if errors.Is(err, os.ErrNotExist) {
-		// The size metadata file is not present, we fail-open by evicting the blob.
+		// The size sidecar file is not present, we fail-open by evicting the blob.
 		return 0, false, nil
 	}
 	if err != nil {

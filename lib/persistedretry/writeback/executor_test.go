@@ -14,7 +14,6 @@
 package writeback
 
 import (
-	"bytes"
 	"errors"
 	"testing"
 
@@ -24,8 +23,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
-	"github.com/uber/kraken/lib/store"
-	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/disk"
 	mockbackend "github.com/uber/kraken/mocks/lib/backend"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/testutil"
@@ -33,7 +31,7 @@ import (
 
 type executorMocks struct {
 	ctrl     *gomock.Controller
-	cas      *store.CAStore
+	store    *disk.Store
 	backends *backend.Manager
 }
 
@@ -44,18 +42,15 @@ func newExecutorMocks(t *testing.T) (*executorMocks, func()) {
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
-	cas, c := store.CAStoreFixture()
-	cleanup.Add(c)
-
 	return &executorMocks{
 		ctrl:     ctrl,
-		cas:      cas,
+		store:    disk.Fixture(t),
 		backends: backend.ManagerFixture(),
 	}, cleanup.Run
 }
 
 func (m *executorMocks) new() *Executor {
-	return NewExecutor(tally.NoopScope, m.cas, m.backends)
+	return NewExecutor(tally.NoopScope, m.store, m.backends)
 }
 
 func (m *executorMocks) client(namespace string) *mockbackend.MockClient {
@@ -66,11 +61,15 @@ func (m *executorMocks) client(namespace string) *mockbackend.MockClient {
 	return client
 }
 
-func setupBlob(t *testing.T, cas *store.CAStore, blob *core.BlobFixture) {
+func setupBlob(t *testing.T, store *disk.Store, blob *core.BlobFixture) {
 	t.Helper()
-	require.NoError(t, cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
-	_, err := cas.SetCacheFileMetadata(blob.Digest.Hex(), metadata.NewPersist(true))
+	f, err := store.Create(blob.Digest.Hex(), uint64(len(blob.Content)))
 	require.NoError(t, err)
+	_, err = f.Write(blob.Content)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	require.NoError(t, store.MarkComplete(blob.Digest.Hex()))
+	require.NoError(t, store.BanEviction(blob.Digest.Hex()))
 }
 
 func TestExec(t *testing.T) {
@@ -81,7 +80,7 @@ func TestExec(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	setupBlob(t, mocks.cas, blob)
+	setupBlob(t, mocks.store, blob)
 
 	task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
 
@@ -94,7 +93,7 @@ func TestExec(t *testing.T) {
 	require.NoError(executor.Exec(task))
 
 	// Should be safe to delete the file.
-	require.NoError(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
+	require.NoError(mocks.store.Delete(blob.Digest.Hex()))
 }
 
 func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
@@ -105,9 +104,7 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	setupBlob(t, mocks.cas, blob)
-
-	require.NoError(mocks.cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	setupBlob(t, mocks.store, blob)
 
 	task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
 
@@ -119,7 +116,7 @@ func TestExecNoopWhenFileAlreadyUploaded(t *testing.T) {
 	require.NoError(executor.Exec(task))
 
 	// Should be safe to delete the file.
-	require.NoError(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
+	require.NoError(mocks.store.Delete(blob.Digest.Hex()))
 }
 
 func TestExecNoopWhenFileMissing(t *testing.T) {
@@ -148,9 +145,7 @@ func TestExecNoopWhenNamespaceNotFound(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	setupBlob(t, mocks.cas, blob)
-
-	require.NoError(mocks.cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	setupBlob(t, mocks.store, blob)
 
 	task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
 
@@ -159,7 +154,7 @@ func TestExecNoopWhenNamespaceNotFound(t *testing.T) {
 	require.NoError(executor.Exec(task))
 
 	// Should be safe to delete the file.
-	require.NoError(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
+	require.NoError(mocks.store.Delete(blob.Digest.Hex()))
 }
 
 func TestExecUploadFailure(t *testing.T) {
@@ -170,7 +165,7 @@ func TestExecUploadFailure(t *testing.T) {
 
 	blob := core.NewBlobFixture()
 
-	setupBlob(t, mocks.cas, blob)
+	setupBlob(t, mocks.store, blob)
 
 	task := NewTask(core.TagFixture(), blob.Digest.Hex(), 0)
 
@@ -182,8 +177,4 @@ func TestExecUploadFailure(t *testing.T) {
 	executor := mocks.new()
 
 	require.Error(executor.Exec(task))
-
-	// Since upload failed, deletion of the file should fail since persist
-	// metadata is still present.
-	require.Error(mocks.cas.DeleteCacheFile(blob.Digest.Hex()))
 }

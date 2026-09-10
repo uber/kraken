@@ -31,7 +31,7 @@ import (
 	"github.com/uber/kraken/lib/metainfogen"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/tiered"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/localdb"
@@ -189,9 +189,9 @@ func Run(flags *Flags, opts ...Option) {
 		flags.PeerIP = localIP
 	}
 
-	cas, err := store.NewCAStore(config.CAStore, stats)
+	tieredStore, diskStore, err := tiered.NewStore(&config.BlobStore, stats)
 	if err != nil {
-		log.Fatalf("Failed to create castore: %s", err)
+		log.Fatalf("Failed to initialize tiered and disk stores: %w", err)
 	}
 
 	pctx, err := core.NewPeerContext(
@@ -215,17 +215,17 @@ func Run(flags *Flags, opts ...Option) {
 		config.WriteBack,
 		stats,
 		writeback.NewStore(localDB),
-		writeback.NewExecutor(stats, cas, backendManager))
+		writeback.NewExecutor(stats, diskStore, backendManager))
 	if err != nil {
 		log.Fatalf("Error creating write-back manager: %s", err)
 	}
 
-	metaInfoGenerator, err := metainfogen.New(config.MetaInfoGen, cas)
+	metaInfoGenerator, err := metainfogen.New(config.MetaInfoGen, tieredStore)
 	if err != nil {
 		log.Fatalf("Error creating metainfo generator: %s", err)
 	}
 
-	blobRefresher := blobrefresh.New(config.BlobRefresh, stats, cas, backendManager, metaInfoGenerator)
+	blobRefresher := blobrefresh.New(config.BlobRefresh, stats, tieredStore, backendManager, metaInfoGenerator)
 
 	netevents, err := networkevent.NewProducer(config.NetworkEvent)
 	if err != nil {
@@ -233,7 +233,7 @@ func Run(flags *Flags, opts ...Option) {
 	}
 
 	sched, err := scheduler.NewOriginScheduler(
-		config.Scheduler, stats, pctx, cas, netevents, blobRefresher)
+		config.Scheduler, stats, pctx, tieredStore, netevents, blobRefresher)
 	if err != nil {
 		log.Fatalf("Error creating scheduler: %s", err)
 	}
@@ -267,7 +267,8 @@ func Run(flags *Flags, opts ...Option) {
 		clock.New(),
 		addr,
 		hashRing,
-		cas,
+		tieredStore,
+		diskStore,
 		blobclient.NewProvider(blobclient.WithTLS(tls)),
 		blobclient.NewClusterProvider(blobclient.WithTLS(tls)),
 		pctx,

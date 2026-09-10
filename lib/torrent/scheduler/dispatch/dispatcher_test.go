@@ -146,8 +146,7 @@ func TestDispatcherSendUniquePieceRequestsWithinLimit(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(100, 1).MetaInfo)
-	defer cleanup()
+	torrent := agentstorage.TorrentFixture(t, core.SizedBlobFixture(100, 1).MetaInfo)
 
 	d := testDispatcher(config, clk, torrent)
 
@@ -200,8 +199,7 @@ func TestDispatcherResendFailedPieceRequests(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(2, 1).MetaInfo)
-	defer cleanup()
+	torrent := agentstorage.TorrentFixture(t, core.SizedBlobFixture(2, 1).MetaInfo)
 
 	d := testDispatcher(config, clk, torrent)
 
@@ -260,8 +258,7 @@ func TestDispatcherSendErrorsMarksPieceRequestsUnsent(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(1, 1).MetaInfo)
-	defer cleanup()
+	torrent := agentstorage.TorrentFixture(t, core.SizedBlobFixture(1, 1).MetaInfo)
 
 	d := testDispatcher(config, clk, torrent)
 
@@ -320,8 +317,7 @@ func TestDispatcherEndgame(t *testing.T) {
 	}
 	clk := clock.NewMock()
 
-	torrent, cleanup := agentstorage.TorrentFixture(core.SizedBlobFixture(1, 1).MetaInfo)
-	defer cleanup()
+	torrent := agentstorage.TorrentFixture(t, core.SizedBlobFixture(1, 1).MetaInfo)
 
 	d := testDispatcher(config, clk, torrent)
 
@@ -346,8 +342,7 @@ func TestDispatcherHandlePiecePayloadAnnouncesPiece(t *testing.T) {
 
 	blob := core.SizedBlobFixture(2, 1)
 
-	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
-	defer cleanup()
+	torrent := agentstorage.TorrentFixture(t, blob.MetaInfo)
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
 
@@ -373,8 +368,7 @@ func TestDispatcherHandlePiecePayloadSendsCompleteMessage(t *testing.T) {
 
 	blob := core.SizedBlobFixture(1, 1)
 
-	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
-	defer cleanup()
+	torrent := agentstorage.TorrentFixture(t, blob.MetaInfo)
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
 
@@ -397,8 +391,7 @@ func TestDispatcherClosesCompletedPeersWhenComplete(t *testing.T) {
 
 	blob := core.SizedBlobFixture(1, 1)
 
-	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
-	defer cleanup()
+	torrent := agentstorage.TorrentFixture(t, blob.MetaInfo)
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
 
@@ -426,8 +419,7 @@ func TestDispatcherHandleCompleteRequestsPieces(t *testing.T) {
 
 	blob := core.SizedBlobFixture(1, 1)
 
-	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
-	defer cleanup()
+	torrent := agentstorage.TorrentFixture(t, blob.MetaInfo)
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
 
@@ -447,8 +439,7 @@ func TestDispatcherPeerPieceCounts(t *testing.T) {
 
 	blob := core.SizedBlobFixture(3, 1)
 
-	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
-	defer cleanup()
+	torrent := agentstorage.TorrentFixture(t, blob.MetaInfo)
 
 	d := testDispatcher(Config{}, clock.NewMock(), torrent)
 

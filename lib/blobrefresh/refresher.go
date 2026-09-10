@@ -16,6 +16,7 @@ package blobrefresh
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/uber/kraken/core"
@@ -23,7 +24,8 @@ import (
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/metainfogen"
 	"github.com/uber/kraken/lib/observability"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/tiered"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/dedup"
 	"github.com/uber/kraken/utils/log"
 
@@ -52,7 +54,7 @@ type Refresher struct {
 	config            Config
 	stats             tally.Scope
 	requests          *dedup.RequestCache
-	cas               *store.CAStore
+	store             *tiered.Store
 	backends          *backend.Manager
 	metaInfoGenerator *metainfogen.Generator
 }
@@ -61,7 +63,7 @@ type Refresher struct {
 func New(
 	config Config,
 	stats tally.Scope,
-	cas *store.CAStore,
+	store *tiered.Store,
 	backends *backend.Manager,
 	metaInfoGenerator *metainfogen.Generator) *Refresher {
 
@@ -75,7 +77,7 @@ func New(
 	requests := dedup.NewRequestCache(dedup.RequestCacheConfig{}, clock.New(), requestsStats)
 	requests.SetNotFound(func(err error) bool { return err == backenderrors.ErrBlobNotFound })
 
-	return &Refresher{config, stats, requests, cas, backends, metaInfoGenerator}
+	return &Refresher{config, stats, requests, store, backends, metaInfoGenerator}
 }
 
 // Refresh kicks off a background goroutine to download the blob for d from the
@@ -106,19 +108,10 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 
 	id := d.Hex()
 	err = r.requests.Start(id, func() error {
-		start := time.Now()
-		pieceLength := r.metaInfoGenerator.GetPieceLength(int64(size))
-		err := r.download(client, namespace, d, size.Bytes(), pieceLength)
+		err := r.download(client, namespace, d, size.Bytes())
 		if err != nil {
 			return err
 		}
-		downloadLatency := time.Since(start)
-		observability.EmitDownloadPerformance(r.stats, observability.REMOTE_DOWNLOAD, info.Size, downloadLatency)
-		log.With(
-			"namespace", namespace,
-			"name", d.Hex(),
-			"blob_size", size.String(),
-			"download_time", downloadLatency).Info("Downloaded remote blob")
 		for _, h := range hooks {
 			h.Run(d)
 		}
@@ -136,9 +129,53 @@ func (r *Refresher) Refresh(namespace string, d core.Digest, hooks ...PostHook) 
 	}
 }
 
-func (r *Refresher) download(client backend.Client, namespace string, d core.Digest, size uint64, pieceLength int64) error {
-	name := d.Hex()
-	return r.cas.WriteBlobToCacheWithMetaInfo(name, size, func(w store.FileReadWriter) error {
-		return client.Download(namespace, name, w)
-	}, pieceLength)
+func (r *Refresher) download(client backend.Client, namespace string, d core.Digest, size uint64) error {
+	start := time.Now()
+	f, err := r.store.Create(d.Hex(), size)
+	if errors.Is(err, os.ErrExist) {
+		if _, complete := r.store.ScopeComplete().Has(d.Hex()); complete {
+			// No-op - the blob is already downloaded by either a previous refresher request or origin blob replication.
+			return nil
+		}
+		// The blob is being replicated from other origins. We need to wait.
+		// If replication fails halfway-through, the disk.Store's leak collector will
+		// remove it after a while, failing open. Until then, we will continue returning ErrPending.
+		return ErrPending
+	}
+	if err != nil {
+		return fmt.Errorf("store create: %w", err)
+	}
+	defer closers.Close(f)
+	err = client.Download(namespace, d.Hex(), f)
+	if err != nil {
+		r.abortDownload(namespace, d)
+		return fmt.Errorf("client download: %w", err)
+	}
+	err = r.store.MarkComplete(d.Hex())
+	if err != nil {
+		r.abortDownload(namespace, d)
+		return fmt.Errorf("mark complete: %w", err)
+	}
+
+	err = r.metaInfoGenerator.Generate(d)
+	if err != nil {
+		return fmt.Errorf("generate and store metainfo: %w", err)
+	}
+
+	downloadLatency := time.Since(start)
+	observability.EmitDownloadPerformance(r.stats, observability.REMOTE_DOWNLOAD, int64(size), downloadLatency)
+	log.With(
+		"namespace", namespace,
+		"name", d.Hex(),
+		"blob_size", size,
+		"download_time", downloadLatency).Info("Downloaded remote blob")
+	return nil
+}
+
+func (r *Refresher) abortDownload(namespace string, d core.Digest) {
+	err := r.store.ScopeIncomplete().Delete(d.Hex())
+	if err != nil {
+		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
+			Error("Leaked blob to disk.Store - failed to clean incomplete blob from disk after failed download")
+	}
 }

@@ -16,6 +16,7 @@ package blobserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,6 +42,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/tiered"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/errutil"
@@ -64,7 +66,7 @@ type Server struct {
 	clk               clock.Clock
 	addr              string
 	hashRing          hashring.Ring
-	cas               *store.CAStore
+	tieredStore       *tiered.Store
 	diskStore         *disk.Store
 	clientProvider    blobclient.Provider
 	clusterProvider   blobclient.ClusterProvider
@@ -72,6 +74,7 @@ type Server struct {
 	blobRefresher     *blobrefresh.Refresher
 	metaInfoGenerator *metainfogen.Generator
 	uploader          *uploader
+	transferUploader  *transferUploader
 	writeBackManager  persistedretry.Manager
 	tracer            trace.Tracer
 
@@ -89,7 +92,8 @@ func New(
 	clk clock.Clock,
 	addr string,
 	hashRing hashring.Ring,
-	cas *store.CAStore,
+	tieredStore *tiered.Store,
+	diskStore *disk.Store,
 	clientProvider blobclient.Provider,
 	clusterProvider blobclient.ClusterProvider,
 	pctx core.PeerContext,
@@ -111,13 +115,15 @@ func New(
 		clk:               clk,
 		addr:              addr,
 		hashRing:          hashRing,
-		cas:               cas,
+		diskStore:         diskStore,
+		tieredStore:       tieredStore,
 		clientProvider:    clientProvider,
 		clusterProvider:   clusterProvider,
 		backends:          backends,
 		blobRefresher:     blobRefresher,
 		metaInfoGenerator: metaInfoGenerator,
-		uploader:          newUploader(cas),
+		uploader:          newUploader(diskStore),
+		transferUploader:  newTransferUploader(tieredStore),
 		writeBackManager:  writeBackManager,
 		tracer:            otel.Tracer("kraken-origin"),
 		pctx:              pctx,
@@ -155,7 +161,6 @@ func (s *Server) Handler() http.Handler {
 
 	r.Post("/namespace/{namespace}/blobs/{digest}/remote/{remote}", handler.Wrap(s.replicateToRemoteHandler))
 
-	r.Post("/forcecleanup", handler.Wrap(s.forceCleanupHandler))
 	r.Post("/forcecleanup/v2", handler.Wrap(s.forceCleanupHandlerV2))
 
 	// Internal endpoints:
@@ -219,11 +224,11 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	bi, err := s.stat(namespace, d, checkLocal)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		log.With("namespace", namespace, "digest", d.Hex(), "local", checkLocal).Debug("Blob not found")
 		return handler.ErrorStatus(http.StatusNotFound)
 	} else if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "local", checkLocal).Errorf("Failed to stat blob: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "local", checkLocal, "error", err).Error("Failed to stat blob")
 		return fmt.Errorf("stat: %s", err)
 	}
 	w.Header().Set("Content-Length", strconv.FormatInt(bi.Size, 10))
@@ -232,16 +237,17 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) stat(namespace string, d core.Digest, checkLocal bool) (*core.BlobInfo, error) {
-	fi, err := s.cas.GetCacheFileStat(d.Hex())
+	size, err := s.tieredStore.ScopeComplete().Stat(d.Hex())
 	if err == nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "size", fi.Size()).Debug("Found blob in local cache")
-		return core.NewBlobInfo(fi.Size()), nil
-	} else if os.IsNotExist(err) {
+		log.With("namespace", namespace, "digest", d.Hex(), "size", size).Debug("Found blob in local cache")
+		return core.NewBlobInfo(size), nil
+	}
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
 		if !checkLocal {
 			log.With("namespace", namespace, "digest", d.Hex()).Debug("Blob not in local cache, checking backend")
 			client, err := s.backends.GetClient(namespace)
 			if err != nil {
-				log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to get backend client: %s", err)
+				log.With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Failed to get backend client")
 				return nil, fmt.Errorf("get backend client: %s", err)
 			}
 			if bi, err := client.Stat(namespace, d.Hex()); err == nil {
@@ -251,15 +257,15 @@ func (s *Server) stat(namespace string, d core.Digest, checkLocal bool) (*core.B
 				log.With("namespace", namespace, "digest", d.Hex()).Debug("Blob not found in backend")
 				return nil, os.ErrNotExist
 			} else {
-				log.With("namespace", namespace, "digest", d.Hex()).Errorf("Backend stat failed: %s", err)
+				log.With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Backend stat failed")
 				return nil, fmt.Errorf("backend stat: %s", err)
 			}
 		}
 		return nil, err // os.ErrNotExist
 	}
 
-	log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to stat cache file: %s", err)
-	return nil, fmt.Errorf("stat cache file: %s", err)
+	log.With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Failed to stat file")
+	return nil, fmt.Errorf("stat file: %s", err)
 }
 
 func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) error {
@@ -321,39 +327,37 @@ func (s *Server) replicateToRemoteHandler(w http.ResponseWriter, r *http.Request
 
 func (s *Server) replicateToRemote(ctx context.Context, namespace string, d core.Digest, remoteDNS string) error {
 	start := time.Now()
-
-	fi, err := s.cas.GetCacheFileStat(d.Hex())
+	size, err := s.tieredStore.ScopeComplete().Stat(d.Hex())
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
+		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS).Info("Blob not in cache, starting remote download")
+		return s.startRemoteBlobDownload(namespace, d, false)
+	}
 	if err != nil {
-		if os.IsNotExist(err) {
-			log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS).Info("Blob not in cache, starting remote download")
-			return s.startRemoteBlobDownload(namespace, d, false)
-		}
-		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS).Errorf("Failed to stat blob: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "error", err).Error("Failed to stat blob")
 		return handler.Errorf("stat blob: %s", err)
 	}
-	blobSize := fi.Size()
 
-	log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize).Info("Starting replication to remote")
-	f, err := s.cas.GetCacheFileReader(d.Hex())
+	log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", size).Info("Starting replication to remote")
+	f, err := s.tieredStore.ScopeComplete().Open(d.Hex())
 	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS).Errorf("Failed to get cache file reader: %s", err)
-		return handler.Errorf("file store: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", size, "error", err).Error("Failed to open complete file")
+		return handler.Errorf("open blob: %s", err)
 	}
 	defer closers.Close(f)
 
 	remote, err := s.clusterProvider.Provide(remoteDNS)
 	if err != nil {
 		duration := time.Since(start)
-		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to get remote cluster provider: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", size, "duration_s", duration.Seconds(), "error", err).Error("Failed to get remote cluster provider")
 		return handler.Errorf("remote cluster provider: %s", err)
 	}
-	if err := remote.UploadBlob(ctx, namespace, d, f, uint64(blobSize)); err != nil {
+	if err := remote.UploadBlob(ctx, namespace, d, f, uint64(size)); err != nil {
 		duration := time.Since(start)
-		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to upload blob to remote: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", size, "duration_s", duration.Seconds(), "error", err).Error("Failed to upload blob to remote")
 		return err
 	}
 	duration := time.Since(start)
-	log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", blobSize, "duration_s", duration.Seconds()).Info("Successfully replicated to remote")
+	log.With("namespace", namespace, "digest", d.Hex(), "remote", remoteDNS, "size_bytes", size, "duration_s", duration.Seconds()).Info("Successfully replicated to remote")
 	return nil
 }
 
@@ -365,7 +369,7 @@ func (s *Server) deleteBlobHandler(w http.ResponseWriter, r *http.Request) error
 	}
 	log.With("digest", d.Hex()).Info("Deleting blob")
 	if err := s.deleteBlob(d); err != nil {
-		log.With("digest", d.Hex()).Errorf("Failed to delete blob: %s", err)
+		log.With("digest", d.Hex(), "error", err).Error("Failed to delete blob")
 		return err
 	}
 	setContentLength(w, 0)
@@ -427,29 +431,29 @@ func (s *Server) overwriteMetaInfoHandler(w http.ResponseWriter, r *http.Request
 	}
 	log.With("digest", d.Hex(), "piece_length", pieceLength).Info("Overwriting metainfo")
 	if err := s.overwriteMetaInfo(d, pieceLength); err != nil {
-		log.With("digest", d.Hex(), "piece_length", pieceLength).Errorf("Failed to overwrite metainfo: %s", err)
+		log.With("digest", d.Hex(), "piece_length", pieceLength, "error", err).Error("Failed to overwrite metainfo")
 		return err
 	}
 	log.With("digest", d.Hex(), "piece_length", pieceLength).Info("Successfully overwrote metainfo")
 	return nil
 }
 
-// overwriteMetaInfo generates metainfo configured with pieceLength for d and
-// writes it to disk, overwriting any existing metainfo. Primarily intended for
-// benchmarking purposes.
+// overwriteMetaInfo generates metainfo configured with pieceLength for d and stores it,
+// overwriting any existing metainfo. Primarily intended for benchmarking purposes.
 func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
-	f, err := s.cas.GetCacheFileReader(d.Hex())
+	f, err := s.tieredStore.ScopeComplete().Open(d.Hex())
 	if err != nil {
-		log.With("digest", d.Hex()).Errorf("Failed to get cache file for metainfo generation: %s", err)
-		return handler.Errorf("get cache file: %s", err)
+		log.With("digest", d.Hex(), "error", err).Error("Failed to open file for metainfo generation")
+		return handler.Errorf("open file: %s", err)
 	}
+	defer closers.Close(f)
 	mi, err := core.NewMetaInfo(d, f, pieceLength)
 	if err != nil {
-		log.With("digest", d.Hex(), "piece_length", pieceLength).Errorf("Failed to create metainfo: %s", err)
+		log.With("digest", d.Hex(), "piece_length", pieceLength, "error", err).Error("Failed to create metainfo")
 		return handler.Errorf("create metainfo: %s", err)
 	}
-	if _, err := s.cas.SetCacheFileMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
-		log.With("digest", d.Hex()).Errorf("Failed to set metainfo: %s", err)
+	if err := s.tieredStore.ScopeComplete().SetMetadata(d.Hex(), metadata.NewTorrentMeta(mi)); err != nil {
+		log.With("digest", d.Hex(), "error", err).Error("Failed to set metainfo")
 		return handler.Errorf("set metainfo: %s", err)
 	}
 	return nil
@@ -461,15 +465,14 @@ func (s *Server) overwriteMetaInfo(d core.Digest, pieceLength int64) error {
 // "202 Accepted" server error.
 func (s *Server) getMetaInfo(namespace string, d core.Digest) ([]byte, error) {
 	var tm metadata.TorrentMeta
-	err := s.cas.GetCacheFileMetadata(d.Hex(), &tm)
-	if os.IsNotExist(err) {
+	ok, err := s.tieredStore.ScopeComplete().GetMetadata(d.Hex(), &tm)
+	if err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, store.ErrOutOfScope) {
+		log.With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Failed to get metainfo")
+		return nil, handler.Errorf("get metadata: %s", err)
+	}
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) || !ok {
 		log.With("namespace", namespace, "digest", d.Hex()).Debug("Metainfo not found in cache, initiating blob download")
 		return nil, s.startRemoteBlobDownload(namespace, d, true)
-	}
-	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("get cache metadata: %s", err)).
-			Errorf("Failed to get metainfo")
-		return nil, handler.Errorf("get cache metadata: %s", err)
 	}
 	return tm.Serialize()
 }
@@ -485,7 +488,7 @@ func (h *localReplicationHook) Run(d core.Digest) {
 	if err := h.server.replicateBlobLocally(d); err != nil {
 		// Don't return error here as we only want to cache storage backend errors.
 		duration := time.Since(start)
-		log.With("digest", d.Hex(), "duration_s", duration.Seconds()).Errorf("Error replicating remote blob: %s", err)
+		log.With("digest", d.Hex(), "duration_s", duration.Seconds(), "error", err).Error("Error replicating remote blob")
 		h.server.metrics.replicateBlobErrors.Inc(1)
 		return
 	}
@@ -514,29 +517,30 @@ func (s *Server) startRemoteBlobDownload(
 		log.With("namespace", namespace, "digest", d.Hex()).Warn("All blob refresh workers are busy")
 		return handler.ErrorStatus(http.StatusServiceUnavailable)
 	default:
-		log.With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to start blob download: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Failed to start blob download")
 		return err
 	}
 }
 
 func (s *Server) replicateBlobLocally(d core.Digest) error {
-	fi, err := s.cas.GetCacheFileStat(d.Hex())
-	var blobSize int64
-	if err == nil {
-		blobSize = fi.Size()
+	blobSize, err := s.tieredStore.ScopeComplete().Stat(d.Hex())
+	if err != nil {
+		log.With("digest", d.Hex(), "error", err).Error("Failed to replicate blob locally")
+		return handler.Errorf("store stat blob: %s", err)
 	}
 
 	log.With("digest", d.Hex(), "size_bytes", blobSize).Debug("Starting replication to local replicas")
 	return s.applyToReplicas(d, func(i int, client blobclient.Client) error {
 		start := time.Now()
-		f, err := s.cas.GetCacheFileReader(d.Hex())
+		f, err := s.tieredStore.ScopeComplete().Open(d.Hex())
 		if err != nil {
-			log.With("digest", d.Hex(), "replica", client.Addr()).Errorf("Failed to get cache reader: %s", err)
-			return fmt.Errorf("get cache reader: %s", err)
+			log.With("digest", d.Hex(), "replica", client.Addr(), "error", err).Error("Failed to open complete file")
+			return fmt.Errorf("open complete file: %s", err)
 		}
+		defer closers.Close(f)
 		if err := client.TransferBlob(d, f, uint64(blobSize)); err != nil {
 			duration := time.Since(start)
-			log.With("digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to transfer blob: %s", err)
+			log.With("error", err, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Error("Failed to transfer blob")
 			return fmt.Errorf("transfer blob: %s", err)
 		}
 		duration := time.Since(start)
@@ -578,16 +582,16 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 // be initiated. This download is asynchronous and downloadBlob will immediately
 // return a "202 Accepted" handler error.
 func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) error {
-	f, err := s.cas.GetCacheFileReader(d.Hex())
-	if os.IsNotExist(err) {
+	f, err := s.tieredStore.ScopeComplete().Open(d.Hex())
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
 		log.With("namespace", namespace, "digest", d.Hex()).
 			Info("Blob not in cache, initiating download from backend")
 		return s.startRemoteBlobDownload(namespace, d, true)
 	}
 	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to get cache file reader: %s", err)).
+		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to open complete file: %s", err)).
 			Error("Download blob failure")
-		return handler.Errorf("get cache file: %s", err)
+		return handler.Errorf("open file: %s", err)
 	}
 	defer closers.Close(f)
 
@@ -600,31 +604,24 @@ func (s *Server) downloadBlob(namespace string, d core.Digest, dst io.Writer) er
 }
 
 func (s *Server) prefetchBlob(namespace string, d core.Digest) error {
-	f, err := s.cas.GetCacheFileReader(d.Hex())
-	if os.IsNotExist(err) {
+	_, ok := s.tieredStore.ScopeComplete().Has(d.Hex())
+	if ok {
 		log.With("namespace", namespace, "digest", d.Hex()).
-			Info("Blob not in cache, initiating download from backend")
-		return s.startRemoteBlobDownload(namespace, d, true)
+			Info("Prefetch successful, blob already in cache")
+		return nil
 	}
-	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "error", fmt.Sprintf("Failed to get cache file reader: %s", err)).
-			Error("Prefetch blob failure")
-		return handler.Errorf("get cache file: %s", err)
-	}
-	defer closers.Close(f)
-
 	log.With("namespace", namespace, "digest", d.Hex()).
-		Info("Prefetch successful, blob already in cache")
-	return nil
+		Info("Blob not in cache, initiating download from backend")
+	return s.startRemoteBlobDownload(namespace, d, true)
 }
 
 func (s *Server) deleteBlob(d core.Digest) error {
-	if err := s.cas.DeleteCacheFile(d.Hex()); err != nil {
-		if os.IsNotExist(err) {
-			log.With("digest", d.Hex()).Warn("Attempted to delete non-existent blob")
+	if err := s.tieredStore.ScopeComplete().Delete(d.Hex()); err != nil {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
+			log.With("digest", d.Hex()).Warn("Attempted to delete non-existent/incomplete blob")
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
-		log.With("digest", d.Hex()).Errorf("Failed to delete blob from cache: %s", err)
+		log.With("digest", d.Hex(), "error", err).Error("Failed to delete complete blob")
 		return handler.Errorf("cannot delete blob data for digest %q: %s", d, err)
 	}
 	return nil
@@ -636,17 +633,21 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return err
 	}
-	log.With("digest", d.Hex()).Debug("Starting internal transfer upload")
-	if ok, err := blobExists(s.cas, d); err != nil {
-		log.With("digest", d.Hex()).Errorf("Failed to check if blob exists: %s", err)
-		return handler.Errorf("check blob: %s", err)
-	} else if ok {
+	size, err := parseUploadSize(r)
+	if err != nil {
+		return err
+	}
+	log.With("digest", d.Hex(), "size", size).Debug("Starting internal transfer upload")
+	_, ok := s.tieredStore.ScopeComplete().Has(d.Hex())
+	if ok {
 		log.With("digest", d.Hex()).Debug("Blob already exists, returning conflict")
 		return handler.ErrorStatus(http.StatusConflict)
 	}
-	uid, err := s.uploader.start(d)
+	uid, err := s.transferUploader.start(d, size)
 	if err != nil {
-		log.With("digest", d.Hex()).Errorf("Failed to start upload: %s", err)
+		if !httputil.IsConflict(err) {
+			log.With("digest", d.Hex(), "error", err).Error("Failed to start upload")
+		}
 		return err
 	}
 	setUploadLocation(w, uid)
@@ -670,8 +671,8 @@ func (s *Server) patchTransferHandler(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 	log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Patching transfer upload chunk")
-	if err := s.uploader.patch(d, uid, r.Body, start, end); err != nil {
-		log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end).Errorf("Failed to patch upload: %s", err)
+	if err := s.transferUploader.patch(d, uid, r.Body, start, end); err != nil {
+		log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end, "error", err).Error("Failed to patch upload")
 		return err
 	}
 	log.With("digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Successfully patched transfer upload chunk")
@@ -690,12 +691,12 @@ func (s *Server) commitTransferHandler(w http.ResponseWriter, r *http.Request) e
 		return err
 	}
 	log.With("digest", d.Hex(), "uid", uid).Info("Committing internal transfer upload")
-	if err := s.uploader.commit(d, uid); err != nil {
-		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to commit upload: %s", err)
+	if err := s.transferUploader.commit(d, uid); err != nil {
+		log.With("digest", d.Hex(), "uid", uid, "error", err).Error("Failed to commit upload")
 		return err
 	}
 	if err := s.metaInfoGenerator.Generate(d); err != nil {
-		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to generate metainfo: %s", err)
+		log.With("digest", d.Hex(), "uid", uid, "error", err).Error("Failed to generate metainfo")
 		return handler.Errorf("generate metainfo: %s", err)
 	}
 	log.With("digest", d.Hex(), "uid", uid).Info("Successfully committed internal transfer upload")
@@ -710,7 +711,7 @@ func (s *Server) handleUploadConflict(ctx context.Context, err error, namespace 
 		// tell a client to stop before commit, the blob has been written back.
 		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Handling upload conflict, ensuring write-back")
 		if err := s.writeBack(ctx, namespace, d, 0); err != nil {
-			log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to ensure write-back on conflict: %s", err)
+			log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Failed to ensure write-back on conflict")
 			return err
 		}
 	}
@@ -740,18 +741,25 @@ func (s *Server) startClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 		span.SetStatus(codes.Error, "parse namespace failed")
 		return err
 	}
+	size, err := parseUploadSize(r)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parse size failed")
+		return err
+	}
 
 	span.SetAttributes(
 		attribute.String("namespace", namespace),
 		attribute.String("blob.digest", d.Hex()),
+		attribute.Int64("blob.size_bytes", int64(size)),
 	)
 
-	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Info("Starting cluster upload")
-	uid, err := s.uploader.start(d)
+	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "size", size).Info("Starting cluster upload")
+	uid, err := s.uploader.start(d, size)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "start upload failed")
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Warnf("Failed to start cluster upload: %s", err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", err).Warn("Failed to start cluster upload")
 		return s.handleUploadConflict(ctx, err, namespace, d)
 	}
 
@@ -813,7 +821,7 @@ func (s *Server) patchClusterUploadHandler(w http.ResponseWriter, r *http.Reques
 	if err := s.uploader.patch(d, uid, r.Body, start, end); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "patch upload failed")
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to patch cluster upload: %s", err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid, "error", err).Error("Failed to patch cluster upload")
 		return s.handleUploadConflict(ctx, err, namespace, d)
 	}
 	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid, "start", start, "end", end).Debug("Successfully patched upload chunk")
@@ -863,22 +871,29 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 	if err := s.uploader.commit(d, uid); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "commit upload failed")
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to commit cluster upload: %s", err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid, "error", err).Error("Failed to commit cluster upload")
 		return s.handleUploadConflict(ctx, err, namespace, d)
 	}
 
 	if err := s.writeBack(ctx, namespace, d, 0); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "writeback initiation failed")
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to write back blob: %s", err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Failed to write back blob")
 		return err
 	}
 
 	// Get blob size for replication logging
-	fi, err := s.cas.GetCacheFileStat(d.Hex())
-	var blobSize int64
-	if err == nil {
-		blobSize = fi.Size()
+	blobSize, err := s.tieredStore.ScopeComplete().Stat(d.Hex())
+	if err != nil {
+		// Don't fail the commit if replication fails - blob is still uploaded.
+		err = fmt.Errorf("store stat: %w", err)
+		log.WithTraceContext(ctx).With(
+			"namespace", namespace,
+			"digest", d.Hex(),
+			"error", err).Warn("Error duplicating write-back task to replicas")
+		span.SetAttributes(attribute.String("replication.error", err.Error()))
+		span.SetStatus(codes.Ok, "upload committed and replicated")
+		return nil
 	}
 	span.SetAttributes(attribute.Int64("blob.size_bytes", blobSize))
 
@@ -887,13 +902,14 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 	err = s.applyToReplicas(d, func(i int, client blobclient.Client) error {
 		replicaStart := time.Now()
 		delay := s.config.DuplicateWriteBackStagger * time.Duration(i+1)
-		f, err := s.cas.GetCacheFileReader(d.Hex())
+		f, err := s.tieredStore.ScopeComplete().Open(d.Hex())
 		if err != nil {
-			return fmt.Errorf("get cache file: %s", err)
+			return fmt.Errorf("open complete file: %s", err)
 		}
+		defer closers.Close(f)
 		if err := client.DuplicateUploadBlob(namespace, d, f, uint64(blobSize), delay); err != nil {
 			duration := time.Since(replicaStart)
-			log.With("namespace", namespace, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to duplicate upload: %s", err)
+			log.With("namespace", namespace, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds(), "error", err).Error("Failed to duplicate upload")
 			return fmt.Errorf("duplicate upload: %s", err)
 		}
 		duration := time.Since(replicaStart)
@@ -905,7 +921,7 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 
 	if err != nil {
 		span.SetAttributes(attribute.String("replication.error", err.Error()))
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "replication_duration_ms", replicateDuration.Milliseconds()).Errorf("Error duplicating write-back task to replicas: %s", err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "replication_duration_ms", replicateDuration.Milliseconds(), "error", err).Error("Error duplicating write-back task to replicas")
 		// Don't fail the commit if replication fails - blob is still uploaded
 	}
 
@@ -932,7 +948,7 @@ func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *h
 
 	var dr blobclient.DuplicateCommitUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&dr); err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to decode request body: %s", err)
+		log.With("namespace", namespace, "digest", d.Hex(), "uid", uid, "error", err).Error("Failed to decode request body")
 		return handler.Errorf("decode body: %s", err)
 	}
 	delay := dr.Delay
@@ -940,11 +956,11 @@ func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *h
 	ctx := r.Context()
 	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid, "delay", delay).Info("Committing duplicate upload")
 	if err := s.uploader.commit(d, uid); err != nil {
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid).Errorf("Failed to commit duplicate upload: %s", err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "uid", uid, "error", err).Error("Failed to commit duplicate upload")
 		return err
 	}
 	if err := s.writeBack(ctx, namespace, d, delay); err != nil {
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "delay", delay).Errorf("Failed to write back duplicate: %s", err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "delay", delay, "error", err).Error("Failed to write back duplicate")
 		return err
 	}
 	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "delay", delay).Info("Successfully committed duplicate upload")
@@ -954,108 +970,26 @@ func (s *Server) duplicateCommitClusterUploadHandler(w http.ResponseWriter, r *h
 func (s *Server) writeBack(ctx context.Context, namespace string, d core.Digest, delay time.Duration) error {
 	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "delay", delay).Debug("Starting write-back process")
 
-	if _, err := s.cas.SetCacheFileMetadata(d.Hex(), metadata.NewPersist(true)); err != nil {
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to set persist metadata: %s", err)
-		return handler.Errorf("set persist metadata: %s", err)
+	if err := s.diskStore.ScopeComplete().BanEviction(d.Hex()); err != nil {
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Failed to ban eviction")
+		return handler.Errorf("ban eviction: %s", err)
 	}
 
 	task := writeback.NewTaskWithContext(ctx, namespace, d.Hex(), delay)
 	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "has_trace", task.HasTraceContext()).Debug("Created writeback task with trace context")
 
 	if err := s.writeBackManager.Add(task); err != nil {
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to add write-back task: %s", err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Failed to add write-back task")
 		return handler.Errorf("add write-back task: %s", err)
 	}
 
 	if err := s.metaInfoGenerator.Generate(d); err != nil {
-		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Errorf("Failed to generate metainfo during write-back: %s", err)
+		log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex(), "error", err).Error("Failed to generate metainfo during write-back")
 		return handler.Errorf("generate metainfo: %s", err)
 	}
 
 	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Successfully scheduled write-back")
 	return nil
-}
-
-func (s *Server) forceCleanupHandler(w http.ResponseWriter, r *http.Request) error {
-	// Note, this API is intended to be executed manually (i.e. curl), hence the
-	// query arguments, usage of hours instead of nanoseconds, and JSON response
-	// enumerating deleted files / errors.
-
-	rawTTLHr := r.URL.Query().Get("ttl_hr")
-	if rawTTLHr == "" {
-		return handler.Errorf("query arg ttl_hr required").Status(http.StatusBadRequest)
-	}
-	ttlHr, err := strconv.Atoi(rawTTLHr)
-	if err != nil {
-		return handler.Errorf("invalid ttl_hr: %s", err).Status(http.StatusBadRequest)
-	}
-	ttl := time.Duration(ttlHr) * time.Hour
-
-	log.With("ttl_hours", ttlHr).Info("Starting force cleanup")
-	names, err := s.cas.ListCacheFiles()
-	if err != nil {
-		log.Errorf("Failed to list cache files for cleanup: %s", err)
-		return err
-	}
-	var errs, deleted []string
-	for _, name := range names {
-		if ok, err := s.maybeDelete(name, ttl); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %s", name, err))
-		} else if ok {
-			deleted = append(deleted, name)
-		}
-	}
-	log.With("deleted_count", len(deleted), "error_count", len(errs), "ttl_hours", ttlHr).Info("Force cleanup completed")
-	return json.NewEncoder(w).Encode(map[string]interface{}{
-		"deleted": deleted,
-		"errors":  errs,
-	})
-}
-
-func (s *Server) maybeDelete(name string, ttl time.Duration) (deleted bool, err error) {
-	d, err := core.NewSHA256DigestFromHex(name)
-	if err != nil {
-		return false, fmt.Errorf("parse digest: %s", err)
-	}
-	info, err := s.cas.GetCacheFileStat(name)
-	if err != nil {
-		return false, fmt.Errorf("store: %s", err)
-	}
-	expired := s.clk.Now().Sub(info.ModTime()) > ttl
-	owns := stringset.FromSlice(s.hashRing.Locations(d)).Has(s.addr)
-	if expired || !owns {
-		log.With("digest", name, "expired", expired, "owns", owns).Debug("Candidate for cleanup")
-		// Ensure file is backed up properly before deleting.
-		var pm metadata.Persist
-		if err := s.cas.GetCacheFileMetadata(name, &pm); err != nil && !os.IsNotExist(err) {
-			return false, fmt.Errorf("store: %s", err)
-		}
-		if pm.Value {
-			// Note: It is possible that no writeback tasks exist, but the file
-			// is persisted. We classify this as a leaked file which is safe to
-			// delete.
-			log.With("digest", name).Debug("File has persist metadata, executing write-back before cleanup")
-			tasks, err := s.writeBackManager.Find(writeback.NewNameQuery(name))
-			if err != nil {
-				return false, fmt.Errorf("find writeback tasks: %s", err)
-			}
-			for _, task := range tasks {
-				if err := s.writeBackManager.SyncExec(task); err != nil {
-					log.With("digest", name).Errorf("Failed to execute write-back during cleanup: %s", err)
-					return false, fmt.Errorf("writeback: %s", err)
-				}
-			}
-			if err := s.cas.DeleteCacheFileMetadata(name, &metadata.Persist{}); err != nil {
-				return false, fmt.Errorf("delete persist: %s", err)
-			}
-		}
-		if err := s.cas.DeleteCacheFile(name); err != nil {
-			return false, fmt.Errorf("delete: %s", err)
-		}
-		log.With("digest", name, "expired", expired, "owns", owns).Info("Cleaned up blob")
-		return true, nil
-	}
-	return false, nil
 }
 
 func (s *Server) forceCleanupHandlerV2(w http.ResponseWriter, r *http.Request) error {

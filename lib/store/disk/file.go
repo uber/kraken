@@ -3,20 +3,28 @@ package disk
 import (
 	"os"
 
+	"github.com/docker/distribution/registry/storage/driver"
 	storelib "github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/utils/log"
 )
 
-func newFile(f *os.File) *File {
+func newFile(f *os.File, path string) *File {
 	return &File{
-		fd: f,
+		fd:   f,
+		path: path,
 	}
 }
 
-var _ storelib.FileReadWriter = &File{}
+var (
+	_ storelib.FileReadWriter = &File{}
+	_ driver.FileWriter       = &File{}
+)
 
 // File represends an open file descriptor to a blob in [Store].
 type File struct {
 	fd *os.File
+	// May become stale after a while, but that's ok, as clients don't call Size() after MarkComplete/RenameKey.
+	path string
 }
 
 func (f *File) Read(p []byte) (n int, err error)               { return f.fd.Read(p) }
@@ -28,8 +36,13 @@ func (f *File) Close() error                                   { return f.fd.Clo
 
 // Size returns the number of bytes the file contains.
 func (f *File) Size() int64 {
-	info, err := f.fd.Stat()
+	// Size is sometimes called after Close() is called, meaning that fd.Stat() will return ErrClosed.
+	info, err := os.Stat(f.path)
 	if err != nil {
+		log.Default().With(
+			"path", f.path,
+			"error", err,
+		).Error("disk.File Stat failed as os.Stat failed")
 		return 0
 	}
 	return info.Size()

@@ -1,13 +1,18 @@
 package disk
 
-import "errors"
-
-const _defaultRootDir = "disk_store"
+import (
+	"errors"
+	"time"
+)
 
 // Config configures [Store].
 type Config struct {
-	// The capacity of the store in bytes. When breached, LRU eviction is used.
-	CapacityBytes uint64 `yaml:"capacity_bytes"`
+	// Capacity is a *soft* limit for the capacity of the store. When breached, LRU eviction is used.
+	// The limit is soft, as deleting a file on Linux removes it from disk only after all FDs to it are closed.
+	// The store supports both weighted and unweighted eviction. An example of weighted eviction is to set capacity
+	// to some number of bytes and provide the size of each blob in [Store.Create]. To use the store unweighted, set
+	// capacity to the number of blobs and provide `size==1` in [Store.Create] for each blob.
+	Capacity uint64 `yaml:"capacity"`
 	// The root directory under which [Store]'s blobs and state are stored.
 	RootDir string `yaml:"root_dir"`
 	// Whether after crash/restart, the Store removes incomplete files from disk (usually to prevent leaks) OR
@@ -17,17 +22,27 @@ type Config struct {
 	// 1) the length of each directory shard's name and 2) the number of shards.
 	// A value of 0 denotes no sharding.
 	ShardLength int `yaml:"shard_length"`
+	// How long an incomplete blob can stay unmodified before it is considered leaked by the leak cleaner.
+	IncompleteBlobTTI time.Duration `yaml:"incomplete_blob_tti"`
+	// The interval at which the leak cleaner scans for and deletes incomplete blobs that have not been used for [Config.IncompleteBlobTTI].
+	LeakCleanerInterval time.Duration `yaml:"leak_cleaner_interval"`
 }
 
 func (c *Config) applyDefaults() error {
-	if c.CapacityBytes == 0 {
-		return errors.New("capacity_bytes must be explicitly set")
+	if c.Capacity == 0 {
+		return errors.New("capacity must be explicitly set")
 	}
 	if c.ShardLength < 0 {
 		return errors.New("shard_length must be non-negative")
 	}
 	if c.RootDir == "" {
-		c.RootDir = _defaultRootDir
+		c.RootDir = "disk_store"
+	}
+	if c.IncompleteBlobTTI == 0 {
+		c.IncompleteBlobTTI = 5 * time.Minute
+	}
+	if c.LeakCleanerInterval == 0 {
+		c.LeakCleanerInterval = 10 * time.Minute
 	}
 	return nil
 }

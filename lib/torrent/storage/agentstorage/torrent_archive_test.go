@@ -14,12 +14,13 @@
 package agentstorage
 
 import (
+	"errors"
 	"os"
 	"sync"
 	"testing"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
@@ -34,7 +35,7 @@ import (
 )
 
 type archiveMocks struct {
-	cads           *store.CADownloadStore
+	store          *disk.Store
 	metaInfoClient *mockmetainfoclient.MockClient
 }
 
@@ -44,16 +45,15 @@ func newArchiveMocks(t *testing.T) (*archiveMocks, func()) {
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
 
-	cads, c := store.CADownloadStoreFixture()
-	cleanup.Add(c)
+	store := disk.Fixture(t)
 
 	metaInfoClient := mockmetainfoclient.NewMockClient(ctrl)
 
-	return &archiveMocks{cads, metaInfoClient}, cleanup.Run
+	return &archiveMocks{store, metaInfoClient}, cleanup.Run
 }
 
 func (m *archiveMocks) new() *TorrentArchive {
-	return NewTorrentArchive(tally.NoopScope, m.cads, m.metaInfoClient)
+	return NewTorrentArchive(tally.NoopScope, m.store, m.metaInfoClient)
 }
 
 func TestTorrentArchiveStatBitfield(t *testing.T) {
@@ -93,7 +93,7 @@ func TestTorrentArchiveStatNotExist(t *testing.T) {
 	d := core.DigestFixture()
 
 	_, err := archive.Stat(namespace, d)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func TestTorrentArchiveCreateTorrent(t *testing.T) {
@@ -115,7 +115,9 @@ func TestTorrentArchiveCreateTorrent(t *testing.T) {
 
 	// Check metainfo.
 	var tm metadata.TorrentMeta
-	require.NoError(mocks.cads.Any().GetMetadata(mi.Digest().Hex(), &tm))
+	ok, err := mocks.store.GetMetadata(mi.Digest().Hex(), &tm)
+	require.NoError(err)
+	require.True(ok)
 	require.Equal(mi, tm.MetaInfo)
 
 	// Create again reads from disk.
@@ -161,7 +163,7 @@ func TestTorrentArchiveDeleteTorrent(t *testing.T) {
 	require.NoError(archive.DeleteTorrent(mi.Digest()))
 
 	_, err = archive.Stat(namespace, mi.Digest())
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func TestTorrentArchiveConcurrentGet(t *testing.T) {

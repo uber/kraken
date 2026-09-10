@@ -3,6 +3,7 @@ package disk
 import (
 	"os"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
@@ -33,8 +34,8 @@ type Store struct {
 //
 //   - If the store's size is bigger than its capacity (e.g. configured capacity has been reduced or files have been leaked),
 //     it evicts blobs until size is within capacity.
-func NewStore(config *Config, stats tally.Scope) (*Store, error) {
-	s, err := newStore(config, stats)
+func NewStore(config *Config, stats tally.Scope, clk clock.Clock) (*Store, error) {
+	s, err := newStore(config, stats, clk)
 	if err != nil {
 		return nil, err
 	}
@@ -46,9 +47,10 @@ func NewStore(config *Config, stats tally.Scope) (*Store, error) {
 
 // Create adds a new, incomplete blob to the store and reserves space for it.
 // Incomplete entries cannot be automatically evicted. MarkComplete must be called once the blob is complete.
-// The store uses `sizeBytes` for its eviction logic even if the blob's real size differs.
-func (s *Store) Create(key string, sizeBytes uint64) (*File, error) {
-	return s.impl.Create(key, sizeBytes)
+// The store uses `size` for its eviction logic and NOT the blob's actual size.
+// Thus the store supports both weighted and unweighted eviction.
+func (s *Store) Create(key string, size uint64) (*File, error) {
+	return s.impl.Create(key, size)
 }
 
 // Open returns an FD to a file in the store. [os.ErrNotExist] is returned on missing entry.
@@ -69,6 +71,10 @@ func (s *Store) Delete(key string) error { return s.impl.Delete(key, s.scope) }
 
 // List returns the keys of all blobs (except those out of scope).
 func (s *Store) List() []string { return s.impl.List(s.scope) }
+
+// RenameKey changes the key of an already present blob. Needed when the key of the blob is not
+// known before creating the blob (e.g. when getting it uploaded in proxy).
+func (s *Store) RenameKey(key, newKey string) error { return s.impl.RenameKey(key, newKey, s.scope) }
 
 // BanEviction marks a blob as unevictable by LRU eviction. It is idempotent.
 // Needed when e.g. blobs must be written back to GCS/S3 and eviction before that is unacceptable.
