@@ -529,6 +529,27 @@ func (s *CAStore) ListCacheFiles() ([]string, error) {
 	return result, nil
 }
 
+// DeleteCacheFile overrides cacheStore.DeleteCacheFile to also remove the
+// entry from the memory cache, if present. Without this override, entries
+// that only exist in the memory cache (never persisted to disk) are never
+// actually removed by callers like the force-cleanup endpoint, which lists
+// candidates via ListCacheFiles (which does include memory entries) but
+// deletes them via this method.
+func (s *CAStore) DeleteCacheFile(name string) error {
+	var inMemCache bool
+	if s.memCache != nil {
+		inMemCache = s.memCache.Get(name) != nil
+		s.memCache.Remove(name)
+	}
+
+	err := s.cacheStore.DeleteCacheFile(name)
+	if err != nil && os.IsNotExist(err) && inMemCache {
+		// Entry only existed in memory; there was never a disk file to delete.
+		return nil
+	}
+	return err
+}
+
 var _ os.FileInfo = &memoryFileInfo{}
 
 // memoryFileInfo implements os.FileInfo for memory cache entries.
