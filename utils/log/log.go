@@ -37,8 +37,11 @@ func init() {
 	ConfigureLogger(zapConfig)
 }
 
+// Option defines an optional ConfigureLogger parameter.
+type Option func(*zap.Logger) *zap.Logger
+
 // ConfigureLogger configures a global zap logger instance.
-func ConfigureLogger(zapConfig zap.Config) *zap.SugaredLogger {
+func ConfigureLogger(zapConfig zap.Config, opts ...Option) *zap.SugaredLogger {
 	logger, err := zapConfig.Build()
 	if err != nil {
 		panic(err)
@@ -46,6 +49,9 @@ func ConfigureLogger(zapConfig zap.Config) *zap.SugaredLogger {
 
 	// Skip this wrapper in a call stack.
 	logger = logger.WithOptions(zap.AddCallerSkip(1))
+	for _, opt := range opts {
+		logger = opt(logger)
+	}
 
 	_default = logger.Sugar()
 	return _default
