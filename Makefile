@@ -160,6 +160,18 @@ NAME?=test_
 runtest: venv docker_stop
 	cd test && PYTHONPATH=. PYTHONWARNINGS=ignore ../venv/bin/python3 -m pytest --timeout=120 -v -k $(NAME) python
 
+.PHONY: perf-bench perf-bench-smoke
+PERF_ARGS?=
+perf-bench:
+	PYTHONPATH=. python3 -m test.perf.runner $(PERF_ARGS)
+
+# Smoke test: brings up a fresh devcluster and runs one cold-pull of a small
+# blob. Cluster is left running so the user can re-run or inspect.
+perf-bench-smoke: docker_stop images
+	PYTHONPATH=. python3 -m test.perf.runner \
+		--env devcluster --workload cold-pull-large-blob \
+		--params blob_size=16MiB --runs 1 --bring-up --agents 2
+
 .PHONY: devcluster
 devcluster: $(LINUX_BINS) docker_stop images
 	./examples/devcluster/herd_start_container.sh
