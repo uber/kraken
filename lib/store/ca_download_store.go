@@ -21,17 +21,17 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/closers"
 )
 
 // CADownloadStore allows simultaneously downloading and uploading
 // content-adddressable files.
 type CADownloadStore struct {
+	config        CADownloadStoreConfig
 	backend       base.FileStore
 	downloadState base.FileState
 	cacheState    base.FileState
 	cleanup       *cleanupManager
-	readPartSize  int
-	writePartSize int
 }
 
 // NewCADownloadStore creates a new CADownloadStore.
@@ -61,12 +61,11 @@ func NewCADownloadStore(config CADownloadStoreConfig, stats tally.Scope) (*CADow
 		backend.NewFileOp().AcceptState(cacheState))
 
 	return &CADownloadStore{
+		config:        config,
 		backend:       backend,
 		downloadState: downloadState,
 		cacheState:    cacheState,
 		cleanup:       cleanup,
-		readPartSize:  config.ReadPartSize,
-		writePartSize: config.WritePartSize,
 	}, nil
 }
 
@@ -80,13 +79,33 @@ func (s *CADownloadStore) CreateDownloadFile(name string, length int64) error {
 	return s.backend.NewFileOp().CreateFile(name, s.downloadState, length)
 }
 
-// GetDownloadFileReadWriter returns a FileReadWriter for name.
-func (s *CADownloadStore) GetDownloadFileReadWriter(name string) (FileReadWriter, error) {
-	return s.backend.NewFileOp().AcceptState(s.downloadState).GetFileReadWriter(name, s.readPartSize, s.writePartSize)
+// GetDownloadFileReader returns a FileReader for name.
+func (s *CADownloadStore) getDownloadFileReader(name string) (FileReader, error) {
+	return s.backend.NewFileOp().AcceptState(s.downloadState).GetFileReader(name, s.config.ReadPartSize)
 }
 
-// MoveDownloadFileToCache moves a download file to the cache.
+// GetDownloadFileReadWriter returns a FileReadWriter for name.
+func (s *CADownloadStore) GetDownloadFileReadWriter(name string) (FileReadWriter, error) {
+	return s.backend.NewFileOp().AcceptState(s.downloadState).GetFileReadWriter(name, s.config.ReadPartSize, s.config.WritePartSize)
+}
+
+// MoveDownloadFileToCache moves a download file to the cache
+// after verifying its digest.
 func (s *CADownloadStore) MoveDownloadFileToCache(name string) error {
+	f, err := s.getDownloadFileReader(name)
+	if err != nil {
+		if s.InCacheError(err) {
+			// Inform the caller the file has already been moved,
+			// matching the behaviour of MoveFile(...).
+			return os.ErrExist
+		}
+		return fmt.Errorf("get file reader %s: %w", name, err)
+	}
+	defer closers.Close(f)
+
+	if err := verifyDigest(f, name, s.config.SkipHashVerification); err != nil {
+		return fmt.Errorf("verify digest: %w", err)
+	}
 	return s.backend.NewFileOp().AcceptState(s.downloadState).MoveFile(name, s.cacheState)
 }
 
@@ -158,7 +177,7 @@ func (s *CADownloadStore) Any() *CADownloadStoreScope {
 
 // GetFileReader returns a reader for name.
 func (a *CADownloadStoreScope) GetFileReader(name string) (FileReader, error) {
-	return a.op.GetFileReader(name, a.store.readPartSize)
+	return a.op.GetFileReader(name, a.store.config.ReadPartSize)
 }
 
 // GetFileStat returns file info for name.

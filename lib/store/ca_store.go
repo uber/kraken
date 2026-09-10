@@ -180,8 +180,8 @@ func (s *CAStore) MoveUploadFileToCache(uploadName, cacheName string) error {
 		return fmt.Errorf("get file reader %s: %s", uploadName, err)
 	}
 	defer closers.Close(f)
-	if err := s.verify(f, cacheName); err != nil {
-		return fmt.Errorf("verify digest: %s", err)
+	if err := verifyDigest(f, cacheName, s.config.SkipHashVerification); err != nil {
+		return fmt.Errorf("verify digest: %w", err)
 	}
 
 	return s.cacheStore.newFileOp().MoveFileFrom(cacheName, s.cacheStore.state, uploadPath)
@@ -328,28 +328,6 @@ func (s *CAStore) addItemForDiskSync(item *drainItem) {
 	s.drain.mu.Lock()
 	defer s.drain.mu.Unlock()
 	s.drain.queue.PushBack(item)
-}
-
-// verify verifies that name is a valid SHA256 digest, and checks if the given
-// blob content matches the digset unless explicitly skipped.
-func (s *CAStore) verify(r io.Reader, name string) error {
-	// Verify that expected name is a valid SHA256 digest.
-	expected, err := core.NewSHA256DigestFromHex(name)
-	if err != nil {
-		return fmt.Errorf("new digest from file name: %s", err)
-	}
-
-	if !s.config.SkipHashVerification {
-		digester := core.NewDigester()
-		computed, err := digester.FromReader(r)
-		if err != nil {
-			return fmt.Errorf("calculate digest: %s", err)
-		}
-		if computed != expected {
-			return fmt.Errorf("computed digest %s doesn't match expected value %s", computed, expected)
-		}
-	}
-	return nil
 }
 
 func (s *CAStore) memoryCacheCleanupWorker() {

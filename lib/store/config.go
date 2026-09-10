@@ -95,4 +95,6 @@ type CADownloadStoreConfig struct {
 	ReadPartSize int `yaml:"read_part_size"`
 	// Part size limit for each file write. 0 means no limit.
 	WritePartSize int `yaml:"write_part_size"`
+
+	SkipHashVerification bool `yaml:"skip_hash_verification"`
 }
