@@ -15,6 +15,7 @@ package security
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sync"
@@ -47,6 +48,7 @@ var v2Version = auth.APIVersion{
 type Config struct {
 	TLS                    httputil.TLSConfig `yaml:"tls"`
 	BasicAuth              *types.AuthConfig  `yaml:"basic"`
+	PasswordFile           string             `yaml:"passwordFile"`
 	RemoteCredentialsStore string             `yaml:"credsStore"`
 	EnableHTTPFallback     bool               `yaml:"enableHTTPFallback"`
 }
@@ -187,6 +189,12 @@ func (c credentialStore) Basic(*url.URL) (string, string) {
 	basic := c.config.BasicAuth
 	if basic == nil {
 		return "", ""
+	}
+	if c.config.PasswordFile != "" {
+		passwordBytes, err := ioutil.ReadFile(c.config.PasswordFile)
+		if err == nil {
+			return basic.Username, string(passwordBytes)
+		}
 	}
 	return basic.Username, basic.Password
 }
