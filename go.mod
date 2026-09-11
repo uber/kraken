@@ -1,6 +1,6 @@
 module github.com/uber/kraken
 
-go 1.27.1
+go 1.26.8
 
 require (
 	cloud.google.com/go/storage v1.6.0

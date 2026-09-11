@@ -5,7 +5,7 @@ GO = go
 BUILD_FLAGS = -gcflags '-N -l'
 BUILD_QUIET ?= -q
 
-GOLANG_IMAGE ?= golang:1.27.1
+GOLANG_IMAGE ?= golang:1.26.8
 GOPROXY ?= $(shell go env GOPROXY)
 
 # Where to find your project
