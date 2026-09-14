@@ -14,10 +14,12 @@
 package scheduler
 
 import (
+	"errors"
 	"io"
 	"net"
 	"reflect"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 
@@ -91,6 +93,10 @@ type testPeer struct {
 	cleanup        *testutil.Cleanup
 }
 
+// _maxPeerBindAttempts bounds how many ports newPeer draws before it gives up
+// on finding one the scheduler can still bind.
+const _maxPeerBindAttempts = 5
+
 func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	var cleanup testutil.Cleanup
 	m.cleanup.Add(cleanup.Run)
@@ -102,21 +108,36 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 
 	ta := agentstorage.NewTorrentArchive(stats, cads, m.metaInfoClient)
 
-	pctx := core.PeerContext{
-		PeerID: core.PeerIDFixture(),
-		Zone:   "zone1",
-		IP:     "localhost",
-		Port:   findFreePort(),
-	}
-	ac := announceclient.New(pctx, hashring.NoopPassiveRing(hostlist.Fixture(m.trackerAddr)), nil)
 	tp := networkevent.NewTestProducer()
 
-	s, err := newScheduler(config, ta, stats, pctx, ac, tp, options...)
-	if err != nil {
-		panic(err)
-	}
-	if err := s.start(announcequeue.New()); err != nil {
-		panic(err)
+	// findFreePort must release a port before the scheduler can bind it, so
+	// another listener may still claim it in between. Re-draw a port and retry
+	// instead of panicking the whole test binary. start returns before it adds
+	// to the wait group or launches a goroutine, so a scheduler which failed to
+	// bind holds nothing and needs no cleanup.
+	var pctx core.PeerContext
+	var s *scheduler
+	for attempt := 1; ; attempt++ {
+		pctx = core.PeerContext{
+			PeerID: core.PeerIDFixture(),
+			Zone:   "zone1",
+			IP:     "localhost",
+			Port:   findFreePort(),
+		}
+		ac := announceclient.New(pctx, hashring.NoopPassiveRing(hostlist.Fixture(m.trackerAddr)), nil)
+
+		var err error
+		s, err = newScheduler(config, ta, stats, pctx, ac, tp, options...)
+		if err != nil {
+			panic(err)
+		}
+		err = s.start(announcequeue.New())
+		if err == nil {
+			break
+		}
+		if attempt == _maxPeerBindAttempts || !errors.Is(err, syscall.EADDRINUSE) {
+			panic(err)
+		}
 	}
 	cleanup.Add(s.Stop)
 
@@ -169,8 +190,15 @@ func (p *testPeer) checkTorrent(t *testing.T, namespace string, blob *core.BlobF
 	require.Equal(blob.Content, result)
 }
 
+// findFreePort returns a port which is free for a wildcard bind.
+//
+// The probe below must bind the same address form the caller binds. A
+// scheduler binds the wildcard ":%d" (see scheduler.start), and the kernel
+// lets a loopback bind and a wildcard bind share one port. Probing
+// "localhost:0" therefore hands back ports which a live peer already listens
+// on, and the next scheduler.start panics with "address already in use".
 func findFreePort() int {
-	l, err := net.Listen("tcp", "localhost:0")
+	l, err := net.Listen("tcp", ":0")
 	if err != nil {
 		panic(err)
 	}
