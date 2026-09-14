@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/memsize"
@@ -50,7 +51,7 @@ func (l *connCountListener) count() int64 { return atomic.LoadInt64(&l.n) }
 // fakeUploadServer starts a fake origin server that handles the three endpoints
 // used by transferClient: POST (start), PATCH (chunk), PUT (commit). Request
 // bodies are discarded.
-func fakeUploadServer(b *testing.B, useTLS bool) (addr string, clientTLS *tls.Config, l *connCountListener) {
+func fakeUploadServer(b testing.TB, useTLS bool) (addr string, clientTLS *tls.Config, l *connCountListener) {
 	b.Helper()
 
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +91,32 @@ func fakeUploadServer(b *testing.B, useTLS bool) (addr string, clientTLS *tls.Co
 	b.Cleanup(s.Close)
 
 	return addr, clientTLS, l
+}
+
+// TestTransferBlobReusesConnections asserts that TransferBlob's sub-requests
+// (POST, PATCH per chunk, PUT) share one pooled connection across repeated
+// calls, instead of opening a fresh connection per request. This is the
+// property BenchmarkTransferBlob's conns/op metric measures, but a benchmark
+// does not run under the unit-test gate, so it cannot catch a regression.
+// This test makes the same property fail CI, not just a manual benchmark run.
+func TestTransferBlobReusesConnections(t *testing.T) {
+	addr, _, l := fakeUploadServer(t, false)
+
+	client := blobclient.NewProvider(blobclient.WithChunkSize(1 * memsize.MB)).Provide(addr)
+	blob := make([]byte, 4*memsize.MB)
+
+	const transfers = 3
+	for i := 0; i < transfers; i++ {
+		digest := core.DigestFixture()
+		require.NoError(t, client.TransferBlob(digest, bytes.NewReader(blob), uint64(len(blob))))
+	}
+
+	// A 4 MB blob at a 1 MB chunk size is 1 POST + 4 PATCH + 1 PUT per
+	// transfer. Without pooling, transfers connections would open 6
+	// connections per transfer; with pooling, 1 connection total.
+	require.LessOrEqual(t, l.count(), int64(1),
+		"expected TransferBlob to reuse one pooled connection across %d transfers, got %d",
+		transfers, l.count())
 }
 
 // BenchmarkTransferBlob measures TCP connection establishment per TransferBlob
