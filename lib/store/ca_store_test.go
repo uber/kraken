@@ -287,6 +287,51 @@ func TestCAStore_GenerateMetadataFromFile_InvalidPieceLength(t *testing.T) {
 	require.Error(s.GetCacheFileMetadata(blob.Digest.Hex(), &tm))
 }
 
+func TestCAStore_GenerateMetadataFromFile_ClosesCacheFile(t *testing.T) {
+	require := require.New(t)
+
+	s, cleanup := CAStoreFixture()
+	defer cleanup()
+
+	const pieceLength = 10
+	blob := core.SizedBlobFixture(100, pieceLength)
+	require.NoError(s.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+
+	// Warm up once, so any descriptor which is opened only on the first call is
+	// already part of the baseline count.
+	require.NoError(s.GenerateMetadataFromFile(blob.Digest.Hex(), pieceLength))
+
+	before := countOpenFiles(t)
+
+	const calls = 50
+	for i := 0; i < calls; i++ {
+		require.NoError(s.GenerateMetadataFromFile(blob.Digest.Hex(), pieceLength))
+	}
+
+	// A missing Close leaks one descriptor per call, so the count grows by
+	// calls. A correct Close leaves it flat. The margin keeps the test stable
+	// against unrelated descriptors opened elsewhere in the process.
+	leaked := countOpenFiles(t) - before
+	require.Less(leaked, calls/5,
+		"leaked %d file descriptors over %d calls: GenerateMetadataFromFile must close the cache file reader",
+		leaked, calls)
+}
+
+// countOpenFiles returns how many file descriptors this process holds open.
+// Readdirnames is used instead of os.ReadDir because ReadDir stats every entry,
+// which fails on darwin for descriptors that close while the directory is read.
+func countOpenFiles(t *testing.T) int {
+	t.Helper()
+
+	d, err := os.Open("/dev/fd")
+	require.NoError(t, err)
+	defer closers.Close(d)
+
+	names, err := d.Readdirnames(-1)
+	require.NoError(t, err)
+	return len(names)
+}
+
 func TestCAStoreConfig_WithMemoryCache(t *testing.T) {
 	require := require.New(t)
 
