@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"strings"
@@ -34,54 +35,92 @@ import (
 	"github.com/uber/kraken/utils/testutil"
 )
 
+// _shardsPerPlacement is the number of shard symlinks a CAStore spreads over
+// its volumes when it initialises.
+const _shardsPerPlacement = 256
+
+// _placements is how many times TestCAStoreInitVolumes repeats the placement.
+//
+// A single placement is a poor sample. Shards are placed by hashing the volume
+// paths, the paths are random temp directories, so one placement centres on an
+// even third (85.3 of 256) with a standard deviation of 7.5. A bound loose
+// enough to survive that variance is also too loose to notice a partly starved
+// volume. Summing repeated placements shrinks the spread relative to the
+// signal, because the spread grows only with the square root of the count, so
+// one bound can be both quiet and strict.
+const _placements = 10
+
 func TestCAStoreInitVolumes(t *testing.T) {
+	require := require.New(t)
+
+	var totals [3]int
+	for i := 0; i < _placements; i++ {
+		counts := placeShardsOverThreeVolumes(t)
+		require.Equal(_shardsPerPlacement, counts[0]+counts[1]+counts[2])
+		for v, n := range counts {
+			totals[v] += n
+		}
+	}
+
+	total := _placements * _shardsPerPlacement
+	require.Equal(total, totals[0]+totals[1]+totals[2])
+
+	// Fail any volume holding less than the even share minus 5.5 standard
+	// deviations. At 10 placements that bound is 722 of 2560. A correct store
+	// trips it with probability 4e-08, while a volume pinned to a 25% share is
+	// caught with probability 0.9999.
+	const evenShare = 1.0 / 3.0
+	mean := evenShare * float64(total)
+	sd := math.Sqrt(float64(total) * evenShare * (1 - evenShare))
+	minPerVolume := mean - 5.5*sd
+
+	for v, n := range totals {
+		require.Greater(float64(n), minPerVolume,
+			"volume %d holds only %d of %d shards over %d placements",
+			v+1, n, total, _placements)
+	}
+}
+
+// placeShardsOverThreeVolumes builds a CAStore across three equally weighted
+// volumes and reports how many shard symlinks landed on each. Every call uses
+// fresh volume paths, so successive calls are independent samples.
+func placeShardsOverThreeVolumes(t *testing.T) [3]int {
+	t.Helper()
 	require := require.New(t)
 
 	config, cleanup := CAStoreConfigFixture()
 	defer cleanup()
 
-	volume1, err := os.MkdirTemp("/tmp", "volume")
-	require.NoError(err)
-	t.Cleanup(func() {
-		require.NoError(os.RemoveAll(volume1))
-	})
-
-	volume2, err := os.MkdirTemp("/tmp", "volume")
-	require.NoError(err)
-	t.Cleanup(func() {
-		require.NoError(os.RemoveAll(volume2))
-	})
-
-	volume3, err := os.MkdirTemp("/tmp", "volume")
-	require.NoError(err)
-	t.Cleanup(func() {
-		require.NoError(os.RemoveAll(volume3))
-	})
-
-	config.Volumes = []Volume{
-		{Location: volume1, Weight: 100},
-		{Location: volume2, Weight: 100},
-		{Location: volume3, Weight: 100},
+	var volumes [3]string
+	defer func() {
+		for _, volume := range volumes {
+			if volume != "" {
+				require.NoError(os.RemoveAll(volume))
+			}
+		}
+	}()
+	for i := range volumes {
+		volume, err := os.MkdirTemp("/tmp", "volume")
+		require.NoError(err)
+		volumes[i] = volume
 	}
 
-	_, err = NewCAStore(config, tally.NoopScope)
+	config.Volumes = []Volume{
+		{Location: volumes[0], Weight: 100},
+		{Location: volumes[1], Weight: 100},
+		{Location: volumes[2], Weight: 100},
+	}
+
+	_, err := NewCAStore(config, tally.NoopScope)
 	require.NoError(err)
 
-	v1Files, err := os.ReadDir(path.Join(volume1, path.Base(config.CacheDir)))
-	require.NoError(err)
-	v2Files, err := os.ReadDir(path.Join(volume2, path.Base(config.CacheDir)))
-	require.NoError(err)
-	v3Files, err := os.ReadDir(path.Join(volume3, path.Base(config.CacheDir)))
-	require.NoError(err)
-	n1 := len(v1Files)
-	n2 := len(v2Files)
-	n3 := len(v3Files)
-
-	// There should be 256 symlinks total, evenly distributed across the volumes.
-	require.Equal(256, (n1 + n2 + n3))
-	require.True(float32(n1)/256 > float32(0.25), "%d/256 should be >0.25", n1)
-	require.True(float32(n2)/256 > float32(0.25), "%d/256 should be >0.25", n2)
-	require.True(float32(n3)/256 > float32(0.25), "%d/256 should be >0.25", n3)
+	var counts [3]int
+	for i, volume := range volumes {
+		files, err := os.ReadDir(path.Join(volume, path.Base(config.CacheDir)))
+		require.NoError(err)
+		counts[i] = len(files)
+	}
+	return counts
 }
 
 func TestCAStoreInitVolumesAfterChangingVolumes(t *testing.T) {
