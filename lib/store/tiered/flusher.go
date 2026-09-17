@@ -139,6 +139,9 @@ func (f *flusher) abort(key string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if _, dirty := f.blobs[key]; dirty {
+		f.log.With("key", key).Warn("Aborting an in-progress flush, the blob is being deleted")
+	}
 	delete(f.blobs, key)
 }
 
@@ -277,6 +280,8 @@ func (f *flusher) flushMetadata(key, mdSuffix string) error {
 	md := metadata.CreateFromSuffix(mdSuffix)
 	ok, err := f.mem.GetMetadata(key, md)
 	if errors.Is(err, os.ErrNotExist) {
+		f.log.With("key", key, "mdSuffix", mdSuffix).Warn(
+			"Blob disappeared from mem store before its metadata could be flushed")
 		return nil
 	}
 	if err != nil {
@@ -285,6 +290,9 @@ func (f *flusher) flushMetadata(key, mdSuffix string) error {
 	if !ok {
 		err = f.disk.DeleteMetadata(key, md.GetSuffix())
 		if errors.Is(err, os.ErrNotExist) {
+			f.log.With("key", key, "mdSuffix", mdSuffix).Warn(
+				"Blob disappeared from disk store before its metadata could be " +
+					"synced with memory through deletion")
 			return nil
 		}
 		if err != nil {
@@ -294,6 +302,8 @@ func (f *flusher) flushMetadata(key, mdSuffix string) error {
 	}
 	err = f.disk.SetMetadata(key, md)
 	if errors.Is(err, os.ErrNotExist) {
+		f.log.With("key", key, "mdSuffix", mdSuffix).Warn(
+			"Blob disappeared from disk store before its metadata could be flushed")
 		return nil
 	}
 	if err != nil {
@@ -307,6 +317,8 @@ func (f *flusher) flushData(b *blob) error {
 	key := b.key
 	memF, err := memOpen(f.mem, key)
 	if errors.Is(err, os.ErrNotExist) {
+		f.log.With("key", key).Warn(
+			"Blob disappeared from mem store before its data flush started, abandoning the flush")
 		return nil
 	}
 	if err != nil {
@@ -321,7 +333,9 @@ func (f *flusher) flushData(b *blob) error {
 	f.mu.Lock()
 	_, ok := f.blobs[b.key]
 	if !ok {
-		// abort was called before we created the file, we need to cleanup.
+		// abort was called before we flushed to the file, we need to cleanup.
+		f.log.With("key", key).Warn(
+			"Flush was aborted by user, cleaning up the disk entry")
 		err := f.disk.Delete(key)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			f.log.With(
@@ -335,6 +349,12 @@ func (f *flusher) flushData(b *blob) error {
 	f.mu.Unlock()
 	_, err = ioCopy(diskF, memF)
 	if errors.Is(err, memory.ErrEvicted) {
+		// TODO - delete the partially written blob from the disk store here. It is
+		// left behind as an incomplete blob, which makes every later Create for
+		// this key fail with os.ErrExist until the leak cleaner removes it.
+		f.log.With("key", key).Warn(
+			"Blob was evicted from mem store mid-flush, abandoning the flush and " +
+				"leaving an incomplete blob on disk")
 		return nil
 	}
 	if err != nil {
@@ -342,6 +362,8 @@ func (f *flusher) flushData(b *blob) error {
 	}
 	err = f.disk.MarkComplete(key)
 	if errors.Is(err, os.ErrNotExist) {
+		f.log.With("key", key).Warn(
+			"Blob disappeared from disk store before its flush could be completed")
 		return nil
 	}
 	if err != nil {
