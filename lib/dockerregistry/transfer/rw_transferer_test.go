@@ -14,14 +14,13 @@
 package transfer
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"testing"
 
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/utils/dockerutil"
@@ -36,7 +35,7 @@ import (
 type proxyTransfererMocks struct {
 	tags          *mocktagclient.MockClient
 	originCluster *mockblobclient.MockClusterClient
-	cas           *store.CAStore
+	store         *disk.Store
 }
 
 func newReadWriteTransfererMocks(t *testing.T) (*proxyTransfererMocks, func()) {
@@ -49,14 +48,13 @@ func newReadWriteTransfererMocks(t *testing.T) (*proxyTransfererMocks, func()) {
 
 	originCluster := mockblobclient.NewMockClusterClient(ctrl)
 
-	cas, c := store.CAStoreFixture()
-	cleanup.Add(c)
+	store := disk.Fixture(t)
 
-	return &proxyTransfererMocks{tags, originCluster, cas}, cleanup.Run
+	return &proxyTransfererMocks{tags, originCluster, store}, cleanup.Run
 }
 
 func (m *proxyTransfererMocks) new() *ReadWriteTransferer {
-	return NewReadWriteTransferer(tally.NoopScope, m.tags, m.originCluster, m.cas)
+	return NewReadWriteTransferer(tally.NoopScope, m.tags, m.originCluster, m.store)
 }
 
 func TestReadWriteTransfererDownloadCachesBlob(t *testing.T) {
@@ -132,7 +130,7 @@ func TestReadWriteTransfererPutTag(t *testing.T) {
 
 	manifestDigest, rawManifest := dockerutil.ManifestFixture(config, layer1, layer2)
 
-	require.NoError(mocks.cas.CreateCacheFile(manifestDigest.Hex(), bytes.NewReader(rawManifest)))
+	disk.RunDownload(t, mocks.store, manifestDigest.Hex(), rawManifest)
 
 	tag := "docker/some-tag"
 
@@ -152,7 +150,7 @@ func TestReadWriteTransfererStatLocalBlob(t *testing.T) {
 	namespace := "docker/test-image"
 	blob := core.NewBlobFixture()
 
-	require.NoError(mocks.cas.CreateCacheFile(blob.Digest.Hex(), bytes.NewReader(blob.Content)))
+	disk.RunDownload(t, mocks.store, blob.Digest.Hex(), blob.Content)
 
 	bi, err := transferer.Stat(namespace, blob.Digest)
 	require.NoError(err)

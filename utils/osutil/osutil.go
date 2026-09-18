@@ -15,6 +15,7 @@ package osutil
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -53,7 +54,7 @@ func ReadLines(f *os.File) ([]string, error) {
 // EnsureFilePresent initializes a file and all parent directories for filepath
 // if they do not exist. If the file exists, no-ops.
 func EnsureFilePresent(filepath string, perm os.FileMode) error {
-	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath); errors.Is(err, os.ErrNotExist) {
 		err := os.MkdirAll(path.Dir(filepath), perm)
 		if err != nil {
 			return fmt.Errorf("mkdir: %s", err)

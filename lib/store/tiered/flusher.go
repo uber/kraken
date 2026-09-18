@@ -23,13 +23,13 @@ var (
 )
 
 type flusher struct {
-	blobs  map[string]*blob
-	queue  []string
-	mu     sync.Mutex
-	notify chan struct{}
-	// TODO - consider whether there's a race when 1) a blob's data is flushed on disk, but the entry is in mem too, 2) new md is enqueued for flushing,
-	// 3) `stop` is closed, and 4) the workers exit before flushing the metadata, thus the disk blob is corrupt (blob data is persisted, but not metadata).
-	stop chan struct{}
+	blobs     map[string]*blob
+	queue     []string
+	mu        sync.Mutex
+	notify    chan struct{}
+	stop      chan struct{}
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 
 	mem  *memory.Store
 	disk *disk.Store
@@ -56,6 +56,7 @@ func newFlusher(mem *memory.Store, disk *disk.Store, log *zap.SugaredLogger, num
 	}
 
 	for range numWorkers {
+		f.wg.Add(1)
 		go f.worker()
 	}
 	return f
@@ -138,14 +139,26 @@ func (f *flusher) abort(key string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if _, dirty := f.blobs[key]; dirty {
+		f.log.With("key", key).Warn("Aborting an in-progress flush, the blob is being deleted")
+	}
 	delete(f.blobs, key)
 }
 
 func (f *flusher) worker() {
+	defer f.wg.Done()
+
 	for {
 		select {
 		case <-f.stop:
-			return
+			// Flush anything left before stopping.
+			for {
+				b, ok := f.nextToFlush()
+				if !ok {
+					return
+				}
+				f.flush(b)
+			}
 		case <-f.notify:
 			for {
 				b, ok := f.nextToFlush()
@@ -156,6 +169,13 @@ func (f *flusher) worker() {
 			}
 		}
 	}
+}
+
+// close blocks until all dirty items are flushed. Items marked as dirty after calling close may or may not be flushed.
+func (f *flusher) close() {
+	f.closeOnce.Do(func() { close(f.stop) })
+
+	f.wg.Wait()
 }
 
 func (f *flusher) nextToFlush() (b *blob, ok bool) {
@@ -212,12 +232,7 @@ func (f *flusher) flush(b *blob) {
 // simulating similar behavior to the file being flushed and subsequently evicted by the disk store's LRU policy.
 // This will break any open [File] handles to the blob after eviction from memory, but it's the best we can do.
 func (f *flusher) handleFlushFailure(key string) {
-	if err := f.disk.Delete(key); err != nil && !errors.Is(err, os.ErrNotExist) {
-		f.log.With(
-			"key", key,
-			"error", err).
-			Error("Could not clean disk entry after flushing failed, blob is now leaked in disk store")
-	}
+	disk.Abort(f.disk, key)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -260,6 +275,8 @@ func (f *flusher) flushMetadata(key, mdSuffix string) error {
 	md := metadata.CreateFromSuffix(mdSuffix)
 	ok, err := f.mem.GetMetadata(key, md)
 	if errors.Is(err, os.ErrNotExist) {
+		f.log.With("key", key, "mdSuffix", mdSuffix).Warn(
+			"Blob disappeared from mem store before its metadata could be flushed")
 		return nil
 	}
 	if err != nil {
@@ -268,6 +285,9 @@ func (f *flusher) flushMetadata(key, mdSuffix string) error {
 	if !ok {
 		err = f.disk.DeleteMetadata(key, md.GetSuffix())
 		if errors.Is(err, os.ErrNotExist) {
+			f.log.With("key", key, "mdSuffix", mdSuffix).Warn(
+				"Blob disappeared from disk store before its metadata could be " +
+					"synced with memory through deletion")
 			return nil
 		}
 		if err != nil {
@@ -277,6 +297,8 @@ func (f *flusher) flushMetadata(key, mdSuffix string) error {
 	}
 	err = f.disk.SetMetadata(key, md)
 	if errors.Is(err, os.ErrNotExist) {
+		f.log.With("key", key, "mdSuffix", mdSuffix).Warn(
+			"Blob disappeared from disk store before its metadata could be flushed")
 		return nil
 	}
 	if err != nil {
@@ -290,6 +312,8 @@ func (f *flusher) flushData(b *blob) error {
 	key := b.key
 	memF, err := memOpen(f.mem, key)
 	if errors.Is(err, os.ErrNotExist) {
+		f.log.With("key", key).Warn(
+			"Blob disappeared from mem store before its data flush started, abandoning the flush")
 		return nil
 	}
 	if err != nil {
@@ -304,20 +328,19 @@ func (f *flusher) flushData(b *blob) error {
 	f.mu.Lock()
 	_, ok := f.blobs[b.key]
 	if !ok {
-		// abort was called before we created the file, we need to cleanup.
-		err := f.disk.Delete(key)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			f.log.With(
-				"key", key,
-				"error", err).
-				Error("Could not clean disk entry after flushing failed, blob is now leaked in disk store")
-		}
+		// abort was called before we flushed to the file, we need to cleanup.
+		f.log.With("key", key).Warn(
+			"Flush was aborted by user, cleaning up the disk entry")
+		disk.Abort(f.disk, key)
 		f.mu.Unlock()
 		return nil
 	}
 	f.mu.Unlock()
 	_, err = ioCopy(diskF, memF)
 	if errors.Is(err, memory.ErrEvicted) {
+		f.log.With("key", key).Warn(
+			"Blob unexpectedly disappeared from mem store mid-flush, abandoning the flush")
+		disk.Abort(f.disk, key)
 		return nil
 	}
 	if err != nil {
@@ -325,6 +348,8 @@ func (f *flusher) flushData(b *blob) error {
 	}
 	err = f.disk.MarkComplete(key)
 	if errors.Is(err, os.ErrNotExist) {
+		f.log.With("key", key).Warn(
+			"Blob disappeared from disk store before its flush could be completed")
 		return nil
 	}
 	if err != nil {

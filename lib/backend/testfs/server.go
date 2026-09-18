@@ -15,6 +15,7 @@ package testfs
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -81,7 +82,7 @@ func (s *Server) statHandler(w http.ResponseWriter, r *http.Request) error {
 
 	info, err := os.Stat(s.path(name))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
 		return handler.Errorf("file store: %s", err)
@@ -99,7 +100,7 @@ func (s *Server) downloadHandler(w http.ResponseWriter, r *http.Request) error {
 
 	f, err := os.Open(s.path(name))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return handler.ErrorStatus(http.StatusNotFound)
 		}
 		return handler.Errorf("open: %s", err)

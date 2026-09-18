@@ -25,7 +25,7 @@ func newTieredConfig(diskCapacity, memCapacity uint64, numWorkers int, rootDir s
 		NumFlushWorkers: numWorkers,
 		DiskConfig: &disk.Config{
 			RootDir:               rootDir,
-			CapacityBytes:         diskCapacity,
+			Capacity:              diskCapacity,
 			RebootIncompleteBlobs: false,
 		},
 		MemConfig: &memory.Config{

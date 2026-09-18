@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store/metadata"
+	"go.uber.org/zap"
 )
 
 func TestPather(t *testing.T) {
@@ -14,8 +15,8 @@ func TestPather(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, os.RemoveAll(rootDir)) })
 	shardLength := 2
-	shardedPather := newPather(rootDir, shardLength)
-	unshardedPather := newPather(rootDir, 0)
+	shardedPather := newPather(rootDir, shardLength, zap.NewNop().Sugar())
+	unshardedPather := newPather(rootDir, 0, zap.NewNop().Sugar())
 	md := metadata.NewTorrentMeta(core.MetaInfoFixture())
 	key := "8c6af6ca6458353bfa8cb3d756ca54a4fe7b1de04196bf1b37e0863c3f806a78"
 

@@ -41,7 +41,7 @@ func NewProducer(config Config) (Producer, error) {
 		}
 		var flag int
 		if _, err := os.Stat(config.LogPath); err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, os.ErrNotExist) {
 				flag = os.O_WRONLY | os.O_CREATE | os.O_EXCL
 			} else {
 				return nil, fmt.Errorf("stat: %s", err)
