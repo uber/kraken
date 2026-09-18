@@ -645,7 +645,7 @@ func (s *Server) startTransferHandler(w http.ResponseWriter, r *http.Request) er
 	}
 	uid, err := s.transferUploader.start(d, size)
 	if err != nil {
-		if !httputil.IsConflict(err) {
+		if !handler.IsStatus(err, http.StatusConflict) {
 			log.With("digest", d.Hex(), "error", err).Error("Failed to start upload")
 		}
 		return err
