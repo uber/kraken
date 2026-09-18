@@ -16,6 +16,7 @@ package core
 import (
 	"bytes"
 	"math/rand"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -163,6 +164,53 @@ func TestNewMetaInfoFromBytes_MatchesReader(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNewMetaInfoFromBytesDoesNotScaleWithBlobSize guards the reason this
+// function exists. NewMetaInfo reads through io.CopyN, which allocates a
+// scratch buffer of min(32KiB, pieceLength) for every piece, so the memory it
+// churns follows the blob. This path hashes straight off the caller's slice
+// and must not. CAStore.generateMetadataFromBytes runs it for every cached
+// blob, so losing the property turns each cache write into blob-sized garbage.
+//
+// Measured at 64 pieces: this path allocates a flat 6344 bytes for a 1 MiB
+// blob and for a 16 MiB blob, near 99 bytes per piece, while the reader path
+// reaches about 33 KiB per piece. The budget below is roughly 40 times the
+// observed value, so a fixed scratch buffer still passes and anything that
+// follows the blob size fails.
+//
+// BenchmarkNewMetaInfoFromBytes reports the same thing, but -bench does not run
+// in CI, so only a test can fail a regression. Allocation volume does not
+// depend on machine speed, so this is not a timing threshold.
+func TestNewMetaInfoFromBytesDoesNotScaleWithBlobSize(t *testing.T) {
+	require := require.New(t)
+
+	const (
+		pieces       = 64
+		maxAllocated = pieces * (4 << 10)
+	)
+
+	for _, blobSize := range []uint64{1 << 20, 16 << 20} {
+		data := randutil.Text(blobSize)
+		d, err := NewDigester().FromBytes(data)
+		require.NoError(err)
+
+		allocated := allocatedBytes(func() {
+			_, err = NewMetaInfoFromBytes(d, data, int64(blobSize/pieces))
+		})
+		require.NoError(err)
+		require.Less(allocated, uint64(maxAllocated),
+			"a %d byte blob allocated %d bytes", blobSize, allocated)
+	}
+}
+
+// allocatedBytes reports how many bytes f allocates.
+func allocatedBytes(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
 }
 
 func BenchmarkNewMetaInfoFromBytes(b *testing.B) {
