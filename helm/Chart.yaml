@@ -1,13 +1,20 @@
+apiVersion: v2
 name: kraken
 description: P2P Docker registry capable of distributing TBs of data in seconds
-version: 0.2.0
-kubeVersion: ">=1.10.0"
+type: application
+version: 0.1.19
+appVersion: "0.1.19"
+kubeVersion: ">=1.19.0"
 keywords:
   - http
   - docker
   - registry
   - p2p
-home: https://github.com/uber/kraken/helm
+  - container
+  - image
+home: https://github.com/uber/kraken
+sources:
+  - https://github.com/uber/kraken
 maintainers:
-  - name: Antoine Pourchet
-    email: antoine.pourchet@gmail.com
+  - name: Kraken Maintainers
+    url: https://github.com/uber/kraken
