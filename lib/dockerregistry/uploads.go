@@ -120,6 +120,7 @@ func (u *uploader) putContent(path string, subtype PathSubType, content []byte) 
 		closers.Close(f)
 		s := newStartedAtMetadata(time.Now())
 		if err := u.store.SetMetadata(uuid, s); err != nil {
+			disk.Abort(u.store, uuid)
 			return fmt.Errorf("set started at: %w", err)
 		}
 		return nil
@@ -150,9 +151,11 @@ func (u *uploader) putBlobContent(path string, content []byte) error {
 		_, err = io.Copy(f, bytes.NewReader(content))
 		closers.Close(f)
 		if err != nil {
+			disk.Abort(u.store, d.Hex())
 			return fmt.Errorf("write content: %w", err)
 		}
 		if err := u.store.MarkComplete(d.Hex()); err != nil {
+			disk.Abort(u.store, d.Hex())
 			return fmt.Errorf("mark complete: %w", err)
 		}
 	}

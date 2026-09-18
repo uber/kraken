@@ -183,7 +183,7 @@ func (r *Refresher) download(client backend.Client, namespace string, d core.Dig
 	if err != nil {
 		phases.logger(namespace, d, size).With("error", err).
 			Error("Remote blob download failed while transferring from the backend")
-		r.abortDownload(namespace, d)
+		tiered.Abort(r.store, d.Hex())
 		return fmt.Errorf("client download: %w", err)
 	}
 
@@ -193,7 +193,7 @@ func (r *Refresher) download(client backend.Client, namespace string, d core.Dig
 	if err != nil {
 		phases.logger(namespace, d, size).With("error", err).
 			Error("Remote blob download failed while marking the blob as complete")
-		r.abortDownload(namespace, d)
+		tiered.Abort(r.store, d.Hex())
 		return fmt.Errorf("mark complete: %w", err)
 	}
 
@@ -211,15 +211,4 @@ func (r *Refresher) download(client backend.Client, namespace string, d core.Dig
 	phases.logger(namespace, d, size).
 		With("download_time", downloadLatency).Info("Downloaded remote blob")
 	return nil
-}
-
-func (r *Refresher) abortDownload(namespace string, d core.Digest) {
-	err := r.store.ScopeIncomplete().Delete(d.Hex())
-	if err != nil {
-		log.With("namespace", namespace, "digest", d.Hex(), "error", err).
-			Error("Leaked blob to disk.Store - failed to clean incomplete blob from disk after failed download")
-		return
-	}
-	log.With("namespace", namespace, "digest", d.Hex()).
-		Info("Cleaned up the incomplete blob from the store after a failed download")
 }

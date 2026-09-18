@@ -7,6 +7,7 @@ import (
 	"github.com/uber-go/tally"
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/metadata"
+	"go.uber.org/zap"
 )
 
 // Store is a key-value, persistent, thread-safe, LRU store for blobs and their [metadata.Metadata].
@@ -128,4 +129,14 @@ func (s *Store) Scoped(scope storelib.BlobScope) *Store { return &Store{s.impl, 
 //     Else, it will delete them, in a random order.
 func (s *Store) Clean(targetUtilPercent int, respectEvictionBan bool) (newUtil int, err error) {
 	return s.impl.Clean(targetUtilPercent, respectEvictionBan)
+}
+
+// Abort deletes an incomplete blob from [Store] and logs any non-nil error from Delete.
+// Intended for handling unexpected errors to prevent leaks.
+func Abort(s *Store, key string) {
+	err := s.ScopeIncomplete().Delete(key)
+	if err != nil {
+		s.impl.log.With("key", key, "error", err, zap.Stack("stack")).
+			Error("Leaked blob to disk.Store - failed to clean incomplete blob from disk after failing to store data in it")
+	}
 }

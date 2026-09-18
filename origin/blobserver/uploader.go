@@ -101,6 +101,7 @@ func (u *uploader) commit(d core.Digest, uid string) error {
 	}
 	err = u.store.MarkComplete(d.Hex())
 	if err != nil {
+		disk.Abort(u.store, d.Hex())
 		log.With("digest", d.Hex(), "uid", uid, "error", err).Errorf("Failed to mark file as complete")
 		return handler.Errorf("mark file as complete: %s", err)
 	}
@@ -162,6 +163,7 @@ func (u *transferUploader) patch(
 func (u *transferUploader) commit(d core.Digest, uid string) error {
 	err := u.store.MarkComplete(d.Hex())
 	if err != nil {
+		tiered.Abort(u.store, d.Hex())
 		log.With("digest", d.Hex(), "uid", uid, "error", err).Errorf("Failed to mark file as complete")
 		return handler.Errorf("mark file as complete: %s", err)
 	}

@@ -39,7 +39,7 @@ func (c *Config) applyDefaults() error {
 		c.RootDir = "disk_store"
 	}
 	if c.IncompleteBlobTTI == 0 {
-		c.IncompleteBlobTTI = 5 * time.Minute
+		c.IncompleteBlobTTI = 1 * time.Hour
 	}
 	if c.LeakCleanerInterval == 0 {
 		c.LeakCleanerInterval = 10 * time.Minute

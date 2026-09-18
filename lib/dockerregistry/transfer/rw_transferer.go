@@ -170,6 +170,7 @@ func (t *ReadWriteTransferer) downloadFromOrigin(ctx context.Context, namespace 
 	}
 	defer closers.Close(w)
 	if err := t.originCluster.DownloadBlob(ctx, namespace, d, w); err != nil {
+		disk.Abort(t.store, tmp)
 		if err == blobclient.ErrBlobNotFound {
 			span.SetStatus(codes.Error, "blob not found")
 			return nil, ErrBlobNotFound
@@ -180,18 +181,16 @@ func (t *ReadWriteTransferer) downloadFromOrigin(ctx context.Context, namespace 
 	}
 	err = t.store.RenameKey(tmp, d.Hex())
 	if err != nil {
+		disk.Abort(t.store, tmp)
 		if !errors.Is(err, os.ErrExist) {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "failed rename file after upload")
 			return nil, fmt.Errorf("rename key: %s", err)
 		}
-		// Another downloader already cached this digest; discard our copy.
-		if err := t.store.Delete(tmp); err != nil {
-			log.With("digest", d).Errorf("Leaked upload file: %s", err)
-		}
 	} else {
 		err := t.store.MarkComplete(d.Hex())
 		if err != nil {
+			disk.Abort(t.store, d.Hex())
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "failed to mark complete")
 			return nil, fmt.Errorf("mark complete: %s", err)

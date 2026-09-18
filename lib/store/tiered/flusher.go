@@ -232,12 +232,7 @@ func (f *flusher) flush(b *blob) {
 // simulating similar behavior to the file being flushed and subsequently evicted by the disk store's LRU policy.
 // This will break any open [File] handles to the blob after eviction from memory, but it's the best we can do.
 func (f *flusher) handleFlushFailure(key string) {
-	if err := f.disk.Delete(key); err != nil && !errors.Is(err, os.ErrNotExist) {
-		f.log.With(
-			"key", key,
-			"error", err).
-			Error("Could not clean disk entry after flushing failed, blob is now leaked in disk store")
-	}
+	disk.Abort(f.disk, key)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -336,25 +331,16 @@ func (f *flusher) flushData(b *blob) error {
 		// abort was called before we flushed to the file, we need to cleanup.
 		f.log.With("key", key).Warn(
 			"Flush was aborted by user, cleaning up the disk entry")
-		err := f.disk.Delete(key)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			f.log.With(
-				"key", key,
-				"error", err).
-				Error("Could not clean disk entry after flushing failed, blob is now leaked in disk store")
-		}
+		disk.Abort(f.disk, key)
 		f.mu.Unlock()
 		return nil
 	}
 	f.mu.Unlock()
 	_, err = ioCopy(diskF, memF)
 	if errors.Is(err, memory.ErrEvicted) {
-		// TODO - delete the partially written blob from the disk store here. It is
-		// left behind as an incomplete blob, which makes every later Create for
-		// this key fail with os.ErrExist until the leak cleaner removes it.
 		f.log.With("key", key).Warn(
-			"Blob was evicted from mem store mid-flush, abandoning the flush and " +
-				"leaving an incomplete blob on disk")
+			"Blob unexpectedly disappeared from mem store mid-flush, abandoning the flush")
+		disk.Abort(f.disk, key)
 		return nil
 	}
 	if err != nil {

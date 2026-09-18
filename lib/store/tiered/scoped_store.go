@@ -5,6 +5,7 @@ import (
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
+	"go.uber.org/zap"
 )
 
 // Store is a tiered (disk + memory), thread-safe, LRU cache for blobs and their [metadata.Metadata].
@@ -98,3 +99,13 @@ func (s *Store) ScopeComplete() *Store { return &Store{s.impl, storelib.BlobScop
 // ScopeIncomplete scopes [Store]'s APIs such that they can only operate on incomplete blobs.
 // [storelib.ErrOutOfScope] is returned if the user tries to operate on a complete blob.
 func (s *Store) ScopeIncomplete() *Store { return &Store{s.impl, storelib.BlobScopeIncomplete} }
+
+// Abort deletes an incomplete blob from [Store] and logs any non-nil error from Delete.
+// Intended for handling unexpected errors to prevent leaks.
+func Abort(s *Store, key string) {
+	err := s.ScopeIncomplete().Delete(key)
+	if err != nil {
+		s.impl.log.With("key", key, "error", err, zap.Stack("stack")).
+			Error("Leaked blob to tiered.Store - failed to clean incomplete blob from disk after failing to store data in it")
+	}
+}

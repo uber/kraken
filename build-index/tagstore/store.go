@@ -41,14 +41,6 @@ var (
 // See [disk.Config.Capacity]for for details.
 const _tagSize = 1
 
-// FileStore defines operations required for storing tags on disk.
-type FileStore interface {
-	Create(key string, size uint64) (*disk.File, error)
-	MarkComplete(key string) error
-	BanEviction(key string) error
-	Open(key string) (*disk.File, error)
-}
-
 // Store defines tag storage operations.
 type Store interface {
 	Put(ctx context.Context, tag string, d core.Digest, writeBackDelay time.Duration) error
@@ -60,7 +52,7 @@ type Store interface {
 // 2. Remote storage: durable tag storage.
 type tagStore struct {
 	config           Config
-	fs               FileStore
+	diskStore        *disk.Store
 	backends         *backend.Manager
 	writeBackManager persistedretry.Manager
 
@@ -72,13 +64,13 @@ type tagStore struct {
 // New creates a new Store.
 func New(
 	config Config,
-	fs FileStore,
+	diskStore *disk.Store,
 	backends *backend.Manager,
 	writeBackManager persistedretry.Manager,
 ) Store {
 	s := &tagStore{
 		config:           config,
-		fs:               fs,
+		diskStore:        diskStore,
 		backends:         backends,
 		writeBackManager: writeBackManager,
 	}
@@ -100,7 +92,7 @@ func (s *tagStore) Put(ctx context.Context, tag string, d core.Digest, writeBack
 		log.WithTraceContext(ctx).With("tag", tag, "error", err).Error("Failed to write tag to disk")
 		return fmt.Errorf("write tag to disk: %s", err)
 	}
-	if err := s.fs.BanEviction(tag); err != nil {
+	if err := s.diskStore.BanEviction(tag); err != nil {
 		log.WithTraceContext(ctx).With("tag", tag, "error", err).Error("Failed to ban eviction")
 		return fmt.Errorf("ban eviction: %s", err)
 	}
@@ -141,7 +133,7 @@ func (s *tagStore) asyncWriteBackStrategy(task persistedretry.Task) error {
 }
 
 func (s *tagStore) writeTagToDisk(tag string, d core.Digest) error {
-	f, err := s.fs.Create(tag, _tagSize)
+	f, err := s.diskStore.Create(tag, _tagSize)
 	if os.IsExist(err) {
 		return nil
 	}
@@ -150,15 +142,20 @@ func (s *tagStore) writeTagToDisk(tag string, d core.Digest) error {
 	}
 	defer closers.Close(f)
 	if _, err := f.Write([]byte(d.String())); err != nil {
+		disk.Abort(s.diskStore, tag)
 		return err
 	}
-	return s.fs.MarkComplete(tag)
+	if err := s.diskStore.MarkComplete(tag); err != nil {
+		disk.Abort(s.diskStore, tag)
+		return err
+	}
+	return nil
 }
 
 func (s *tagStore) resolveFromDisk(tag string) (core.Digest, error) {
 	log.With("tag", tag).Debug("Attempting to resolve tag from disk cache")
 
-	f, err := s.fs.Open(tag)
+	f, err := s.diskStore.Open(tag)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			log.With("tag", tag).Debug("Tag not found in disk cache")
