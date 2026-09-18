@@ -43,11 +43,11 @@ var _ sizer = (store.FileReader)(nil)
 // Upload uploads src into name.
 func (c *ThrottledClient) Upload(namespace, name string, src io.Reader) error {
 	if s, ok := src.(sizer); ok {
-		// Only throttle if the src implements a Size method.
 		if err := c.bandwidth.ReserveEgress(s.Size()); err != nil {
-			log.With("name", name).Errorf("Error reserving egress: %s", err)
-			// Ignore error.
+			log.With("name", name, "error", err).Errorf("Could not self-throttle during remote blob upload. Proceeding with no throttling")
 		}
+	} else {
+		log.With("name", name, "error", "cannot determine size of blob to upload").Errorf("Could not self-throttle during remote blob upload. Proceeding with no throttling")
 	}
 	return c.Client.Upload(namespace, name, src)
 }
@@ -59,8 +59,7 @@ func (c *ThrottledClient) Download(namespace, name string, dst io.Writer) error 
 		return err
 	}
 	if err := c.bandwidth.ReserveIngress(info.Size); err != nil {
-		log.With("name", name).Errorf("Error reserving ingress: %s", err)
-		// Ignore error.
+		log.With("name", name, "error", err).Errorf("Could not self-throttle during remote blob download. Proceeding with no throttling")
 	}
 	return c.Client.Download(namespace, name, dst)
 }
