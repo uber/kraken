@@ -192,6 +192,8 @@ type Handshaker struct {
 	networkEvents networkevent.Producer
 	peerID        core.PeerID
 	events        Events
+
+	logger *zap.SugaredLogger
 }
 
 // NewHandshaker creates a new Handshaker.
@@ -223,6 +225,7 @@ func NewHandshaker(
 		networkEvents: networkEvents,
 		peerID:        peerID,
 		events:        events,
+		logger:        logger,
 	}, nil
 }
 
@@ -359,5 +362,5 @@ func (h *Handshaker) newConn(
 		isPeerOrigin,
 		info,
 		openedByRemote,
-		zap.NewNop().Sugar())
+		h.logger)
 }

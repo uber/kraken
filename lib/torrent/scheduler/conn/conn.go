@@ -201,7 +201,7 @@ func (c *Conn) IsClosed() bool {
 
 func (c *Conn) readPayload(length int32) ([]byte, error) {
 	if err := c.bandwidth.ReserveIngress(int64(length)); err != nil {
-		c.log().Errorf("Error reserving ingress bandwidth for piece payload: %s", err)
+		c.log().With("error", err).Info("Piece payload exceeded ingress bandwidth limit")
 		return nil, fmt.Errorf("ingress bandwidth: %s", err)
 	}
 	payload := make([]byte, length)
@@ -248,7 +248,7 @@ func (c *Conn) readLoop() {
 		default:
 			msg, err := c.readMessage()
 			if err != nil {
-				c.log().Infof("Error reading message from socket, exiting read loop: %s", err)
+				c.log().With("error", err).Debug("Error reading message from socket, exiting read loop")
 				return
 			}
 			c.receiver <- msg
@@ -260,8 +260,7 @@ func (c *Conn) sendPiecePayload(pr storage.PieceReader) error {
 	defer closers.Close(pr)
 
 	if err := c.bandwidth.ReserveEgress(int64(pr.Length())); err != nil {
-		// TODO(codyg): This is bad. Consider alerting here.
-		c.log().Errorf("Error reserving egress bandwidth for piece payload: %s", err)
+		c.log().With("error", err).Info("Piece payload exceeded egress bandwidth limit")
 		return fmt.Errorf("egress bandwidth: %s", err)
 	}
 	n, err := io.Copy(c.nc, pr)
@@ -300,7 +299,7 @@ func (c *Conn) writeLoop() {
 			return
 		case msg := <-c.sender:
 			if err := c.sendMessage(msg); err != nil {
-				c.log().Infof("Error writing message to socket, exiting write loop: %s", err)
+				c.log().With("error", err).Debug("Error writing message to socket, exiting write loop")
 				return
 			}
 		}
