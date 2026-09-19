@@ -14,8 +14,10 @@
 package store
 
 import (
+	"errors"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/uber/kraken/core"
@@ -31,13 +33,21 @@ func TestCADownloadStoreDownloadAndDeleteFiles(t *testing.T) {
 
 	var names []string
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		name := core.DigestFixture().Hex()
+	for range 100 {
+		blob := core.NewBlobFixture()
+		name := blob.Digest.Hex()
 		names = append(names, name)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			require.NoError(s.CreateDownloadFile(name, 1))
+
+			require.NoError(s.CreateDownloadFile(name, blob.Length()))
+			w, err := s.GetDownloadFileReadWriter(name)
+			require.NoError(err)
+			_, err = w.Write(blob.Content)
+			require.NoError(err)
+			require.NoError(w.Close())
+
 			require.NoError(s.MoveDownloadFileToCache(name))
 			require.NoError(s.Cache().DeleteFile(name))
 		}()
@@ -48,4 +58,126 @@ func TestCADownloadStoreDownloadAndDeleteFiles(t *testing.T) {
 		_, err := s.Cache().GetFileStat(name)
 		require.True(os.IsNotExist(err))
 	}
+}
+
+func TestCADownloadStoreMoveDownloadFileToCacheConcurrent(t *testing.T) {
+	require := require.New(t)
+
+	s, cleanup := CADownloadStoreFixture()
+	defer cleanup()
+
+	blob := core.NewBlobFixture()
+	name := blob.Digest.Hex()
+
+	require.NoError(s.CreateDownloadFile(name, blob.Length()))
+	w, err := s.GetDownloadFileReadWriter(name)
+	require.NoError(err)
+	_, err = w.Write(blob.Content)
+	require.NoError(err)
+	require.NoError(w.Close())
+
+	var success atomic.Int32
+	var exists atomic.Int32
+	var errMu sync.Mutex
+	var errs error
+	var wg sync.WaitGroup
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			err := s.MoveDownloadFileToCache(name)
+			switch err {
+			case nil:
+				success.Add(1)
+			case os.ErrExist:
+				exists.Add(1)
+			default:
+				errMu.Lock()
+				errs = errors.Join(errs, err)
+				errMu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	require.NoError(errs)
+	require.Equal(int32(1), success.Load())
+	require.Equal(int32(9), exists.Load())
+}
+
+func TestCADownloadStoreMoveDownloadFileToCacheNonMatchingDigest(t *testing.T) {
+	require := require.New(t)
+
+	s, cleanup := CADownloadStoreFixture()
+	defer cleanup()
+
+	blob := core.NewBlobFixture()
+	name := blob.Digest.Hex()
+
+	require.NoError(s.CreateDownloadFile(name, blob.Length()))
+	w, err := s.GetDownloadFileReadWriter(name)
+	require.NoError(err)
+	corrupted := make([]byte, len(blob.Content))
+	copy(corrupted, blob.Content)
+	corrupted[0]++
+	_, err = w.Write(corrupted)
+	require.NoError(err)
+	require.NoError(w.Close())
+
+	err = s.MoveDownloadFileToCache(name)
+	require.ErrorContains(err, "verify digest: computed digest")
+
+	_, err = s.Download().GetFileStat(name)
+	require.NoError(err)
+	_, err = s.Cache().GetFileStat(name)
+	require.True(s.InDownloadError(err))
+}
+
+func TestCADownloadStoreMoveDownloadFileToCacheSkipVerification(t *testing.T) {
+	require := require.New(t)
+
+	s, cleanup := CADownloadStoreFixture()
+	s.config.SkipHashVerification = true
+	defer cleanup()
+
+	blob := core.NewBlobFixture()
+	name := blob.Digest.Hex()
+
+	require.NoError(s.CreateDownloadFile(name, blob.Length()))
+	w, err := s.GetDownloadFileReadWriter(name)
+	require.NoError(err)
+	emptyBlob := make([]byte, len(blob.Content))
+	_, err = w.Write(emptyBlob)
+	require.NoError(err)
+	require.NoError(w.Close())
+
+	err = s.MoveDownloadFileToCache(name)
+	require.NoError(err)
+
+	_, err = s.Cache().GetFileStat(name)
+	require.NoError(err)
+}
+
+func TestCADownloadStoreMoveDownloadFileToCacheAlreadyInCache(t *testing.T) {
+	require := require.New(t)
+
+	s, cleanup := CADownloadStoreFixture()
+	defer cleanup()
+
+	blob := core.NewBlobFixture()
+	name := blob.Digest.Hex()
+
+	require.NoError(s.CreateDownloadFile(name, blob.Length()))
+	w, err := s.GetDownloadFileReadWriter(name)
+	require.NoError(err)
+	_, err = w.Write(blob.Content)
+	require.NoError(err)
+	require.NoError(w.Close())
+
+	err = s.MoveDownloadFileToCache(name)
+	require.NoError(err)
+
+	err = s.MoveDownloadFileToCache(name)
+	require.True(os.IsExist(err))
 }
