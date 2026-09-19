@@ -26,6 +26,7 @@ import (
 	"github.com/uber/kraken/metrics"
 	"github.com/uber/kraken/nginx"
 	"github.com/uber/kraken/utils/httputil"
+	"github.com/uber/kraken/utils/log"
 
 	"go.uber.org/zap"
 )
@@ -47,6 +48,7 @@ type Config struct {
 	TLS              httputil.TLSConfig             `yaml:"tls"`
 	AllowedCidrs     []string                       `yaml:"allowed_cidrs"`
 	ContainerRuntime containerruntime.Config        `yaml:"container_runtime"`
+	Diagnostics      log.Config                     `yaml:"diagnostics_log"`
 
 	// Deprecated
 	DockerDaemon dockerdaemon.Config `yaml:"docker_daemon"`

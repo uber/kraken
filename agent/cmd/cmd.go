@@ -40,6 +40,7 @@ import (
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/netutil"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Flags defines agent CLI flags.
@@ -142,7 +143,7 @@ func Run(flags *Flags, opts ...Option) {
 	if overrides.logger != nil {
 		log.SetGlobalLogger(overrides.logger.Sugar())
 	} else {
-		zlog := log.ConfigureLogger(config.ZapLogging)
+		zlog := log.ConfigureLogger(config.ZapLogging, withDiagnostics(config.Diagnostics))
 		defer func() {
 			if err := zlog.Sync(); err != nil {
 				fmt.Printf("Failed to sync logger: %s", err)
@@ -287,6 +288,22 @@ func validateRequiredPorts(flags *Flags) {
 	}
 	if flags.AgentRegistryPort == 0 {
 		panic("must specify non-zero agent registry port")
+	}
+}
+
+// withDiagnostics tees the logger's logs to a second logger defined by its config.
+func withDiagnostics(config log.Config) log.Option {
+	return func(logger *zap.Logger) *zap.Logger {
+		if config.Path == "" {
+			return logger
+		}
+		dlogger, err := log.New(config, nil)
+		if err != nil {
+			panic(err)
+		}
+		return logger.WithOptions(zap.WrapCore(func(c zapcore.Core) zapcore.Core {
+			return zapcore.NewTee(c, dlogger.Core())
+		}))
 	}
 }
 

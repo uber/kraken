@@ -14,7 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/utils/log"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestParseFlags(t *testing.T) {
@@ -245,6 +248,45 @@ func TestValidateRequiredPorts(t *testing.T) {
 		})
 	}
 }
+
+func TestWithDiagnostics(t *testing.T) {
+	t.Run("no-op when path is empty", func(t *testing.T) {
+		core, _ := observer.New(zapcore.DebugLevel)
+		base := zap.New(core)
+
+		opt := withDiagnostics(log.Config{})
+		logger := opt(base)
+
+		require.Same(t, base, logger)
+	})
+
+	t.Run("tees logs to diagnostics file", func(t *testing.T) {
+		core, observed := observer.New(zapcore.DebugLevel)
+		base := zap.New(core)
+
+		f := filepath.Join(t.TempDir(), "diagnostics.log")
+		config := log.Config{
+			Path:     f,
+			Level:    zapcore.ErrorLevel,
+			Encoding: "json",
+		}
+		opt := withDiagnostics(config)
+		logger := opt(base)
+
+		logger.Info("info message")
+		logger.Error("error message")
+		require.NoError(t, logger.Sync())
+
+		assert.Equal(t, 2, observed.Len())
+
+		data, err := os.ReadFile(f)
+		require.NoError(t, err)
+		content := string(data)
+		assert.Contains(t, content, "error message")
+		assert.NotContains(t, content, "info message")
+	})
+}
+
 func TestHeartbeatWithTicker(t *testing.T) {
 	scope := tally.NewTestScope("", nil)
 	mockClock := clock.NewMock()
