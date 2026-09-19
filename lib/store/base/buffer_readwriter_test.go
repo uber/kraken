@@ -15,7 +15,11 @@
 package base
 
 import (
+	"errors"
+	"fmt"
 	"io"
+	"runtime"
+	"sync"
 	"testing"
 	"testing/iotest"
 
@@ -49,6 +53,7 @@ func TestBufferReadWriter_Write(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expectedSize, buf.Size())
+			assert.Equal(t, tt.expectedResult, buf.Bytes())
 		})
 	}
 }
@@ -111,6 +116,9 @@ func TestBufferReadWriter_WriteAt(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expectedSize, buf.Size())
+			if tt.expectedResult != nil {
+				assert.Equal(t, tt.expectedResult, buf.Bytes())
+			}
 		})
 	}
 }
@@ -307,4 +315,142 @@ func TestBufferReadWriter_TestReader(t *testing.T) {
 
 	err = iotest.TestReader(buf, content)
 	require.NoError(t, err)
+}
+
+func TestBufferReadWriter_ConcurrentWriteAt(t *testing.T) {
+	const numShards, shardSize = 10, 1024
+	totalSize := uint64(numShards * shardSize)
+
+	tests := []struct {
+		name     string
+		initSize uint64
+	}{
+		{"presized", totalSize},
+		{"half_presized", totalSize / 2},
+		{"dynamic", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := make([]byte, totalSize)
+			for i := range data {
+				data[i] = byte(i % 256)
+			}
+
+			buf := NewBufferReadWriter(tt.initSize)
+			errs := make([]error, numShards)
+			var wg sync.WaitGroup
+			for i := 0; i < numShards; i++ {
+				wg.Add(1)
+				go func(shard int) {
+					defer wg.Done()
+					off := shard * shardSize
+					_, errs[shard] = buf.WriteAt(data[off:off+shardSize], int64(off))
+				}(i)
+			}
+			wg.Wait()
+
+			require.NoError(t, errors.Join(errs...))
+			assert.Equal(t, data, buf.Bytes())
+		})
+	}
+}
+
+func TestBufferReadWriter_WriteAtEmpty(t *testing.T) {
+	buf := NewBufferReadWriter(0)
+	n, err := buf.WriteAt(nil, 1<<30)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+	assert.Equal(t, int64(0), buf.Size())
+	assert.Empty(t, buf.Bytes())
+}
+
+func totalMutexContentions() int64 {
+	size := 1024
+	for {
+		records := make([]runtime.BlockProfileRecord, size)
+		n, ok := runtime.MutexProfile(records)
+		if ok {
+			var total int64
+			for i := 0; i < n; i++ {
+				total += records[i].Count
+			}
+			return total
+		}
+		size = n + 64
+	}
+}
+
+// benchmarkWriteAt is the shared helper for all WriteAt benchmarks.
+// numShards goroutines each write a non-overlapping 4 MiB shard concurrently,
+// initSize controls the buffer's initial allocation:
+//   - initSize == totalSize: pre-sized fast path (production case)
+//   - initSize == 0:         dynamic growth (sequential / wrong-size case)
+//   - initSize == totalSize/2: partial pre-allocation, triggers growth mid-download
+func benchmarkWriteAt(b *testing.B, numShards int, initSize uint64) {
+	b.Helper()
+	const shardSize = 4 * 1024 * 1024
+	totalSize := uint64(numShards) * shardSize
+
+	shards := make([][]byte, numShards)
+	for i := range shards {
+		shards[i] = make([]byte, shardSize)
+		for j := range shards[i] {
+			shards[i][j] = byte(i)
+		}
+	}
+
+	prev := runtime.SetMutexProfileFraction(1)
+	defer runtime.SetMutexProfileFraction(prev)
+	startContentions := totalMutexContentions()
+	b.SetBytes(int64(totalSize))
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	errs := make([]error, numShards)
+	for b.Loop() {
+		buf := NewBufferReadWriter(initSize)
+		var wg sync.WaitGroup
+		for shard := 0; shard < numShards; shard++ {
+			wg.Add(1)
+			go func(s int) {
+				defer wg.Done()
+				_, errs[s] = buf.WriteAt(shards[s], int64(s)*shardSize)
+			}(shard)
+		}
+		wg.Wait()
+		if err := errors.Join(errs...); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	b.StopTimer()
+	if b.N > 0 {
+		b.ReportMetric(float64(totalMutexContentions()-startContentions)/float64(b.N), "mutex-contentions/op")
+	}
+}
+
+// BenchmarkBufferReadWriter_WriteAt exercises three buffer initialization
+// strategies × three shard counts.
+func BenchmarkBufferReadWriter_WriteAt(b *testing.B) {
+	const shardSize = 4 * 1024 * 1024
+	cases := []struct {
+		label    string
+		initFunc func(total uint64) uint64
+	}{
+		{"presized", func(total uint64) uint64 { return total }},          // production fast path
+		{"half_presized", func(total uint64) uint64 { return total / 2 }}, // partial pre-alloc, growth needed
+		{"dynamic", func(total uint64) uint64 { return 0 }},               // no pre-alloc, always grows
+	}
+	shardCounts := []int{1, 4, 10}
+
+	for _, tc := range cases {
+		for _, numShards := range shardCounts {
+			totalSize := uint64(numShards) * shardSize
+			initSize := tc.initFunc(totalSize)
+			b.Run(fmt.Sprintf("%s_%d_shards", tc.label, numShards), func(b *testing.B) {
+				benchmarkWriteAt(b, numShards, initSize)
+			})
+		}
+	}
 }
