@@ -109,11 +109,8 @@ func NewLocalFileEntryFactory() FileEntryFactory {
 
 // Create initializes and returns a FileEntry object.
 func (f *localFileEntryFactory) Create(name string, state FileState) (FileEntry, error) {
-	if name != filepath.Clean(name) {
-		return nil, ErrInvalidName
-	}
-	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.HasPrefix(name, "../") {
-		return nil, ErrInvalidName
+	if err := validateEntryName(name); err != nil {
+		return nil, fmt.Errorf("validate name: %w", err)
 	}
 	return newLocalFileEntry(state, name, f.GetRelativePath(name)), nil
 }
@@ -159,6 +156,17 @@ func (f *localFileEntryFactory) ListNames(state FileState) ([]string, error) {
 	return names, err
 }
 
+// validateEntryName returns ErrInvalidName if name is unsafe because it may escape its base directory.
+func validateEntryName(name string) error {
+	for part := range strings.SplitSeq(name, "/") {
+		if part == "" || part == "." || part == ".." {
+			log.With("name", name).Warn("Failed to validate file entry name")
+			return ErrInvalidName
+		}
+	}
+	return nil
+}
+
 // casFileEntryFactory initializes localFileEntry obj.
 // It uses the first few bytes of file digest (which is also used as file name) as shard ID.
 // For every byte, one more level of directories will be created.
@@ -170,8 +178,10 @@ func NewCASFileEntryFactory() FileEntryFactory {
 }
 
 // Create initializes and returns a FileEntry object.
-// TODO: verify name.
 func (f *casFileEntryFactory) Create(name string, state FileState) (FileEntry, error) {
+	if err := validateEntryName(name); err != nil {
+		return nil, fmt.Errorf("validate name: %w", err)
+	}
 	return newLocalFileEntry(state, name, f.GetRelativePath(name)), nil
 }
 
