@@ -85,5 +85,58 @@ func TestShardedDockerBlobErrors(t *testing.T) {
 }
 
 func TestNameFromBlobPathErrors(t *testing.T) {
-	// TODO(codyg): Write me!
+	tests := map[string]struct {
+		pather       string
+		giveBasepath string
+		wantName     string
+		wantErr      string
+	}{
+		"docker tag success": {
+			pather:       DockerTag,
+			giveBasepath: "/root/docker/registry/v2/repositories/foo/_manifests/tags/latest/current/link",
+			wantName:     "foo:latest",
+		},
+		"docker tag invalid format": {
+			pather:       DockerTag,
+			giveBasepath: "/root/docker/registry/v2/repositories/invalid",
+			wantErr:      "invalid docker tag path format",
+		},
+		"sharded docker blob success": {
+			pather:       ShardedDockerBlob,
+			giveBasepath: "/root/docker/registry/v2/blobs/sha256/ff/ff85ceb9734a3c2fbb886e0f7cfc66b046eeeae953d8cb430dc5a7ace544b0e9/data",
+			wantName:     "ff85ceb9734a3c2fbb886e0f7cfc66b046eeeae953d8cb430dc5a7ace544b0e9",
+		},
+		"sharded docker blob invalid format": {
+			pather:       ShardedDockerBlob,
+			giveBasepath: "/root/docker/registry/v2/blobs/invalid",
+			wantErr:      "invalid sharded docker blob path format",
+		},
+		"identity success": {
+			pather:       Identity,
+			giveBasepath: "/root/foo/bar",
+			wantName:     "foo/bar",
+		},
+		"identity invalid format": {
+			pather:       Identity,
+			giveBasepath: "/other/foo/bar",
+			wantErr:      "invalid identity path format",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			require := require.New(t)
+
+			p, err := New("/root", tt.pather)
+			require.NoError(err)
+
+			name, err := p.NameFromBlobPath(tt.giveBasepath)
+			if tt.wantErr != "" {
+				require.EqualError(err, tt.wantErr)
+				return
+			}
+			require.NoError(err)
+			require.Equal(tt.wantName, name)
+		})
+	}
 }
