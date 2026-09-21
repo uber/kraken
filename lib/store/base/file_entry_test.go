@@ -94,62 +94,89 @@ func TestLocalFileEntryFactoryListNamesWithSlashes(t *testing.T) {
 	checkListNames(t, factory, state, entries)
 }
 
-func TestLocalFileEntryFactoryCreate(t *testing.T) {
+func TestFileEntryFactoryCreate(t *testing.T) {
 	state, _, _, cleanup := fileStatesFixture()
 	defer cleanup()
 
-	testCases := []struct {
-		desc string
-		name string
+	tests := map[string]struct {
+		giveName string
+		wantErr  bool
 	}{
-		{"simple", "foo"},
-		{"dot prefix", ".foo"},
-		{"dot suffix", "foo."},
-		{"dot reference", "fo.o"},
-		{"dot dot prefix", "..foo"},
-		{"dot dot suffix", "foo.."},
-		{"dot dot reference", "fo..o"},
-		{"slash references", "x/y/z"},
-		{"slash references and dot", "x/.y/z"},
-		{"slash references and dot dot", "x/..y/z"},
+		"success": {
+			giveName: "foo",
+		},
+		"failure with invalid name": {
+			giveName: "../invalid",
+			wantErr:  true,
+		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			require := require.New(t)
-			factory := NewLocalFileEntryFactory()
-			entry, err := factory.Create(tc.name, state)
-			require.NoError(err)
-			require.NotNil(entry)
-		})
+	for _, factory := range []FileEntryFactory{
+		NewLocalFileEntryFactory(),
+		NewCASFileEntryFactory(),
+	} {
+		fname := reflect.Indirect(reflect.ValueOf(factory)).Type().Name()
+		for name, tt := range tests {
+			t.Run(fname+"/"+name, func(t *testing.T) {
+				require := require.New(t)
+
+				entry, err := factory.Create(tt.giveName, state)
+				if tt.wantErr {
+					require.ErrorIs(err, ErrInvalidName)
+					require.ErrorContains(err, "validate name")
+					require.Nil(entry)
+					return
+				}
+				require.NoError(err)
+				require.NotNil(entry)
+			})
+		}
 	}
 }
 
-func TestLocalFileEntryFactoryCreateError(t *testing.T) {
-	state, _, _, cleanup := fileStatesFixture()
-	defer cleanup()
-
-	testCases := []struct {
-		desc string
-		name string
+func TestValidateEntryName(t *testing.T) {
+	tests := map[string]struct {
+		giveName string
+		wantErr  bool
 	}{
-		{"slash prefix", "/foo"},
-		{"slash suffix", "foo/"},
-		{"slash prefix and suffix", "/foo/"},
-		{"dot slash prefix", "./foo"},
-		{"dot slash reference", "foo/./bar"},
-		{"slash dot suffix", "foo/."},
-		{"dot dot slash prefix", "../foo"},
-		{"dot dot slash reference", "foo/../bar"},
-		{"slash dot dot suffix", "foo/.."},
+		"simple":                       {giveName: "foo"},
+		"dot prefix":                   {giveName: ".foo"},
+		"dot suffix":                   {giveName: "foo."},
+		"dot reference":                {giveName: "fo.o"},
+		"dot dot prefix":               {giveName: "..foo"},
+		"dot dot suffix":               {giveName: "foo.."},
+		"dot dot reference":            {giveName: "fo..o"},
+		"three dots":                   {giveName: "..."},
+		"slash references":             {giveName: "x/y/z"},
+		"slash references and dot":     {giveName: "x/.y/z"},
+		"slash references and dot dot": {giveName: "x/..y/z"},
+		"empty":                        {giveName: "", wantErr: true},
+		"dot":                          {giveName: ".", wantErr: true},
+		"dot dot":                      {giveName: "..", wantErr: true},
+		"slash":                        {giveName: "/", wantErr: true},
+		"slash prefix":                 {giveName: "/foo", wantErr: true},
+		"slash suffix":                 {giveName: "foo/", wantErr: true},
+		"slash prefix and suffix":      {giveName: "/foo/", wantErr: true},
+		"double slash":                 {giveName: "foo//bar", wantErr: true},
+		"dot slash prefix":             {giveName: "./foo", wantErr: true},
+		"dot slash reference":          {giveName: "foo/./bar", wantErr: true},
+		"slash dot suffix":             {giveName: "foo/.", wantErr: true},
+		"dot dot slash prefix":         {giveName: "../foo", wantErr: true},
+		"dot dot slash reference":      {giveName: "foo/../bar", wantErr: true},
+		"slash dot dot suffix":         {giveName: "foo/..", wantErr: true},
+		"multi level traversal":        {giveName: "../../foo/bar", wantErr: true},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
 			require := require.New(t)
-			factory := NewLocalFileEntryFactory()
-			_, err := factory.Create(tc.name, state)
-			require.Equal(ErrInvalidName, err)
+
+			err := validateEntryName(tt.giveName)
+			if tt.wantErr {
+				require.ErrorIs(err, ErrInvalidName)
+				return
+			}
+			require.NoError(err)
 		})
 	}
 }
