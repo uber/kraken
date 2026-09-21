@@ -32,6 +32,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/lib/backend/namepath"
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/lib/middleware"
 	"github.com/uber/kraken/lib/persistedretry"
@@ -193,7 +194,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 	)
 	defer span.End()
 
-	tag, err := httputil.ParseParam(r, "tag")
+	tag, err := parseTag(r)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "parse tag failed")
@@ -258,7 +259,7 @@ func (s *Server) putTagHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) duplicatePutTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := httputil.ParseParam(r, "tag")
+	tag, err := parseTag(r)
 	if err != nil {
 		return err
 	}
@@ -288,7 +289,7 @@ func (s *Server) duplicatePutTagHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := httputil.ParseParam(r, "tag")
+	tag, err := parseTag(r)
 	if err != nil {
 		return err
 	}
@@ -314,7 +315,7 @@ func (s *Server) getTagHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) hasTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := httputil.ParseParam(r, "tag")
+	tag, err := parseTag(r)
 	if err != nil {
 		return err
 	}
@@ -380,7 +381,7 @@ func (s *Server) listHandler(w http.ResponseWriter, r *http.Request) error {
 // tagmodels.ListResponse.
 // TODO(codyg): Remove this.
 func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) error {
-	repo, err := httputil.ParseParam(r, "repo")
+	repo, err := parseRepo(r)
 	if err != nil {
 		return err
 	}
@@ -428,7 +429,7 @@ func (s *Server) listRepositoryHandler(w http.ResponseWriter, r *http.Request) e
 }
 
 func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := httputil.ParseParam(r, "tag")
+	tag, err := parseTag(r)
 	if err != nil {
 		return err
 	}
@@ -467,7 +468,7 @@ func (s *Server) replicateTagHandler(w http.ResponseWriter, r *http.Request) err
 }
 
 func (s *Server) duplicateReplicateTagHandler(w http.ResponseWriter, r *http.Request) error {
-	tag, err := httputil.ParseParam(r, "tag")
+	tag, err := parseTag(r)
 	if err != nil {
 		return err
 	}
@@ -664,4 +665,28 @@ func buildPaginationResponse(u *url.URL, continuationToken string,
 	resp.Links.Self = u.String()
 
 	return &resp, nil
+}
+
+// parseTag parses and validates the tag param from the request.
+func parseTag(r *http.Request) (string, error) {
+	tag, err := httputil.ParseParam(r, "tag")
+	if err != nil {
+		return "", err
+	}
+	if _, _, err = namepath.ParseDockerTag(tag); err != nil {
+		return "", handler.Errorf("invalid tag: %s", err).Status(http.StatusBadRequest)
+	}
+	return tag, nil
+}
+
+// parseRepo parses and validates the repo param from the request.
+func parseRepo(r *http.Request) (string, error) {
+	repo, err := httputil.ParseParam(r, "repo")
+	if err != nil {
+		return "", err
+	}
+	if err := namepath.ValidateDockerRepo(repo); err != nil {
+		return "", handler.Errorf("invalid repository: %s", err).Status(http.StatusBadRequest)
+	}
+	return repo, nil
 }

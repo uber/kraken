@@ -19,6 +19,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -183,7 +184,8 @@ func TestStorageDriverStat(t *testing.T) {
 	defer cleanup()
 
 	sd, testImage := td.setup()
-	newManifestPath := genManifestTagCurrentLinkPath(string(randutil.Text(4)), string(randutil.Text(4)), core.DigestFixture().Hex())
+	newManifestPath := genManifestTagCurrentLinkPath(
+		strings.ToLower(string(randutil.Text(4))), string(randutil.Text(4)), core.DigestFixture().Hex())
 
 	testCases := []struct {
 		input string
