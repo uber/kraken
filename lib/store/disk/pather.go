@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -16,13 +18,14 @@ const (
 type pather struct {
 	dir         string
 	shardLength int
+	log         *zap.SugaredLogger
 }
 
 // shardLength is the number of bytes of blob key to be used for shard ID.
 // For every byte (2 HEX char), one more level of directories will be created.
 // A shardLength of 0 denotes no sharding.
-func newPather(rootDir string, shardLength int) *pather {
-	return &pather{dir: rootDir, shardLength: shardLength}
+func newPather(rootDir string, shardLength int, log *zap.SugaredLogger) *pather {
+	return &pather{dir: rootDir, shardLength: shardLength, log: log}
 }
 
 func (p *pather) blobPath(key string, complete bool) string {
@@ -64,30 +67,29 @@ func (p *pather) rebootKeys(complete bool) ([]string, error) {
 	if !ok {
 		return []string{}, nil
 	}
+	numShards := p.shardLength
 	err = filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-
-		if !entry.IsDir() {
+		if entry.IsDir() || entry.Name() != _blobFileName {
 			return nil
 		}
-		if path == dir {
-			return nil
-		}
-		relPath, err := filepath.Rel(dir, path)
+		// We can't just take the parent dir's name as the key, since some keys
+		// might have "/" as a part of their names, causing their names to be split over several directories.
+		relPath, err := filepath.Rel(dir, filepath.Dir(path))
 		if err != nil {
 			return err
 		}
 		nameParts := strings.Split(relPath, string(filepath.Separator))
-		numShards := p.shardLength
-		isBlobDir := len(nameParts) == numShards+1
-		if !isBlobDir {
+		if len(nameParts) < numShards {
+			p.log.With("path", path).Error(
+				"invariant violation - cannot reboot blob, as its path is shallower than the configured shard length - failing open by not rebooting it")
 			return nil
 		}
-		key := nameParts[len(nameParts)-1]
+		key := strings.Join(nameParts[numShards:], string(filepath.Separator))
 		keys = append(keys, key)
-		return fs.SkipDir
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("walk through dir '%v' to reboot blob keys: %w", dir, err)

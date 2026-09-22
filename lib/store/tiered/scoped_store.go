@@ -5,6 +5,7 @@ import (
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
+	"go.uber.org/zap"
 )
 
 // Store is a tiered (disk + memory), thread-safe, LRU cache for blobs and their [metadata.Metadata].
@@ -26,6 +27,8 @@ type Store struct {
 
 // NewStore creates a new [Store] and returns its underlying [disk.Store] in case the
 // user wants to directly operate on disk (e.g. if persistence is mandatory).
+// Each blob should be accessed through either [Store] or [disk.Store]'s APIs but not
+// both at the same time, as otherwise undefined behavior may occur due to messing up [tiered.Store]'s internal state.
 func NewStore(config *Config, stats tally.Scope) (*Store, *disk.Store, error) {
 	impl, diskStore, err := newStore(config, stats)
 	if err != nil {
@@ -82,6 +85,13 @@ func (s *Store) DeleteMetadata(key string, mdSuffix string) error {
 	return s.impl.DeleteMetadata(key, mdSuffix, s.scope)
 }
 
+// Close blocks until all dirty items are flushed.
+// Items marked as dirty after calling close may or may not be flushed,
+// thus Close is intended for testing, not application shutdown.
+func (s *Store) Close() {
+	s.impl.Close()
+}
+
 // ScopeComplete scopes [Store]'s APIs such that they can only operate on complete blobs.
 // [storelib.ErrOutOfScope] is returned if the user tries to operate on an incomplete blob.
 func (s *Store) ScopeComplete() *Store { return &Store{s.impl, storelib.BlobScopeComplete} }
@@ -89,3 +99,13 @@ func (s *Store) ScopeComplete() *Store { return &Store{s.impl, storelib.BlobScop
 // ScopeIncomplete scopes [Store]'s APIs such that they can only operate on incomplete blobs.
 // [storelib.ErrOutOfScope] is returned if the user tries to operate on a complete blob.
 func (s *Store) ScopeIncomplete() *Store { return &Store{s.impl, storelib.BlobScopeIncomplete} }
+
+// Abort deletes an incomplete blob from [Store] and logs any non-nil error from Delete.
+// Intended for handling unexpected errors to prevent leaks.
+func Abort(s *Store, key string) {
+	err := s.ScopeIncomplete().Delete(key)
+	if err != nil {
+		s.impl.log.With("key", key, "error", err, zap.Stack("stack")).
+			Error("Leaked blob to tiered.Store - failed to clean incomplete blob from disk after failing to store data in it")
+	}
+}

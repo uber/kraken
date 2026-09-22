@@ -16,14 +16,13 @@ package transfer
 import (
 	"bytes"
 	"io"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	mocktagclient "github.com/uber/kraken/mocks/build-index/tagclient"
 	mockscheduler "github.com/uber/kraken/mocks/lib/torrent/scheduler"
 	"github.com/uber/kraken/utils/memsize"
@@ -35,7 +34,7 @@ import (
 )
 
 type agentTransfererMocks struct {
-	cads  *store.CADownloadStore
+	store *disk.Store
 	tags  *mocktagclient.MockClient
 	sched *mockscheduler.MockScheduler
 	stats tally.TestScope
@@ -44,8 +43,7 @@ type agentTransfererMocks struct {
 func newReadOnlyTransfererMocks(t *testing.T) (*agentTransfererMocks, func()) {
 	var cleanup testutil.Cleanup
 
-	cads, c := store.CADownloadStoreFixture()
-	cleanup.Add(c)
+	store := disk.Fixture(t)
 
 	ctrl := gomock.NewController(t)
 	cleanup.Add(ctrl.Finish)
@@ -56,11 +54,11 @@ func newReadOnlyTransfererMocks(t *testing.T) (*agentTransfererMocks, func()) {
 
 	stats := tally.NewTestScope("", nil)
 
-	return &agentTransfererMocks{cads, tags, sched, stats}, cleanup.Run
+	return &agentTransfererMocks{store, tags, sched, stats}, cleanup.Run
 }
 
 func (m *agentTransfererMocks) new() *ReadOnlyTransferer {
-	return NewReadOnlyTransferer(m.stats, m.cads, m.tags, m.sched)
+	return NewReadOnlyTransferer(m.stats, m.store, m.tags, m.sched)
 }
 
 // mbServedValue returns the "mb_served" counter value from the scope.
@@ -87,7 +85,8 @@ func TestReadOnlyTransfererDownloadCachesBlob(t *testing.T) {
 	mocks.sched.EXPECT().Download(
 		namespace, blob.Digest).DoAndReturn(func(namespace string, d core.Digest) error {
 
-		return store.RunDownload(mocks.cads, d, blob.Content)
+		disk.RunDownload(t, mocks.store, d.Hex(), blob.Content)
+		return nil
 	})
 
 	// Downloading multiple times should only call scheduler download once.
@@ -123,7 +122,8 @@ func TestReadOnlyTransfererDownloadEmitsMBServed(t *testing.T) {
 
 			mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
 				func(namespace string, d core.Digest) error {
-					return store.RunDownload(mocks.cads, d, blob.Content)
+					disk.RunDownload(t, mocks.store, d.Hex(), blob.Content)
+					return nil
 				})
 
 			result, err := transferer.Download(namespace, blob.Digest)
@@ -152,7 +152,8 @@ func TestReadOnlyTransfererDownloadEmitsMBServedOnCacheHit(t *testing.T) {
 
 	mocks.sched.EXPECT().Download(namespace, blob.Digest).DoAndReturn(
 		func(namespace string, d core.Digest) error {
-			return store.RunDownload(mocks.cads, d, blob.Content)
+			disk.RunDownload(t, mocks.store, d.Hex(), blob.Content)
+			return nil
 		})
 
 	for i := 0; i < 3; i++ {
@@ -179,7 +180,8 @@ func TestReadOnlyTransfererStat(t *testing.T) {
 	mocks.sched.EXPECT().Download(
 		namespace, blob.Digest).DoAndReturn(func(namespace string, d core.Digest) error {
 
-		return store.RunDownload(mocks.cads, d, blob.Content)
+		disk.RunDownload(t, mocks.store, d.Hex(), blob.Content)
+		return nil
 	})
 
 	// Stat-ing multiple times should only call scheduler download once.
@@ -238,11 +240,11 @@ func TestReadOnlyTransfererMultipleDownloadsOfSameBlob(t *testing.T) {
 	namespace := "docker/repo-bar:latest"
 	blob := core.NewBlobFixture()
 
-	require.NoError(mocks.cads.CreateDownloadFile(blob.Digest.Hex(), blob.Length()))
-	w, err := mocks.cads.GetDownloadFileReadWriter(blob.Digest.Hex())
+	f, err := mocks.store.Create(blob.Digest.Hex(), uint64(blob.Length()))
 	require.NoError(err)
-	_, err = io.Copy(w, bytes.NewReader(blob.Content))
+	_, err = io.Copy(f, bytes.NewReader(blob.Content))
 	require.NoError(err)
+	require.NoError(f.Close())
 
 	commit := make(chan struct{})
 
@@ -251,10 +253,7 @@ func TestReadOnlyTransfererMultipleDownloadsOfSameBlob(t *testing.T) {
 
 		<-commit
 
-		if err := mocks.cads.MoveDownloadFileToCache(d.Hex()); !os.IsExist(err) {
-			return err
-		}
-		return nil
+		return mocks.store.MarkComplete(d.Hex())
 	}).Times(10)
 
 	// Multiple clients trying to download the same file which is already in

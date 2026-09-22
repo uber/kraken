@@ -24,6 +24,7 @@ import (
 
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/docker/distribution/registry/storage/driver"
@@ -117,17 +118,13 @@ func (factory *krakenStorageDriverFactory) Create(params map[string]interface{})
 
 	switch constructor {
 	case _rw:
-		castore, ok := getParam(params, "castore").(*store.CAStore)
+		diskStore, ok := getParam(params, "diskstore").(*disk.Store)
 		if !ok {
-			return nil, fmt.Errorf("expected castore param to be *store.CAStore, got %T", getParam(params, "castore"))
+			return nil, fmt.Errorf("expected diskstore param to be *disk.Store, got %T", getParam(params, "diskstore"))
 		}
-		return NewReadWriteStorageDriver(config, castore, transferer, factory.verification), nil
+		return NewReadWriteStorageDriver(config, diskStore, transferer, factory.verification), nil
 	case _ro:
-		blobstore, ok := getParam(params, "blobstore").(BlobStore)
-		if !ok {
-			return nil, fmt.Errorf("expected blobstore param to be BlobStore, got %T", getParam(params, "blobstore"))
-		}
-		return NewReadOnlyStorageDriver(config, blobstore, transferer, factory.verification), nil
+		return NewReadOnlyStorageDriver(config, transferer, factory.verification), nil
 	default:
 		return nil, fmt.Errorf("unknown constructor %s", constructor)
 	}
@@ -145,14 +142,14 @@ type KrakenStorageDriver struct {
 // NewReadWriteStorageDriver creates a KrakenStorageDriver which can push / pull blobs.
 func NewReadWriteStorageDriver(
 	config Config,
-	cas *store.CAStore,
+	diskStore *disk.Store,
 	transferer transfer.ImageTransferer,
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
-		blobs:      newBlobs(cas, transferer),
-		uploads:    newCASUploads(cas, transferer),
+		blobs:      newBlobs(transferer),
+		uploads:    newUploader(diskStore, transferer),
 		manifests:  newManifests(transferer, verification),
 	}
 }
@@ -160,13 +157,12 @@ func NewReadWriteStorageDriver(
 // NewReadOnlyStorageDriver creates a KrakenStorageDriver which can only pull blobs.
 func NewReadOnlyStorageDriver(
 	config Config,
-	bs BlobStore,
 	transferer transfer.ImageTransferer,
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)) *KrakenStorageDriver {
 	return &KrakenStorageDriver{
 		config:     config,
 		transferer: transferer,
-		blobs:      newBlobs(bs, transferer),
+		blobs:      newBlobs(transferer),
 		uploads:    disabledUploads{},
 		manifests:  newManifests(transferer, verification),
 	}

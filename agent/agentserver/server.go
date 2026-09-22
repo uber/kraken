@@ -16,6 +16,7 @@ package agentserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +31,7 @@ import (
 	"github.com/uber/kraken/lib/containerruntime"
 	"github.com/uber/kraken/lib/middleware"
 	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/tracker/announceclient"
 	"github.com/uber/kraken/utils/closers"
@@ -51,7 +53,7 @@ type Config struct {
 type Server struct {
 	config           Config
 	stats            tally.Scope
-	cads             *store.CADownloadStore
+	diskStore        *disk.Store
 	sched            scheduler.ReloadableScheduler
 	tags             tagclient.Client
 	ac               announceclient.Client
@@ -63,7 +65,7 @@ type Server struct {
 func New(
 	config Config,
 	stats tally.Scope,
-	cads *store.CADownloadStore,
+	diskStore *disk.Store,
 	sched scheduler.ReloadableScheduler,
 	tags tagclient.Client,
 	ac announceclient.Client,
@@ -76,7 +78,7 @@ func New(
 	return &Server{
 		config:           config,
 		stats:            stats,
-		cads:             cads,
+		diskStore:        diskStore,
 		sched:            sched,
 		tags:             tags,
 		ac:               ac,
@@ -143,21 +145,22 @@ func (s *Server) downloadBlobHandler(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
-	f, err := s.cads.Cache().GetFileReader(d.Hex())
-	if err != nil {
-		if os.IsNotExist(err) || s.cads.InDownloadError(err) {
-			if err := s.sched.Download(namespace, d); err != nil {
-				if err == scheduler.ErrTorrentNotFound {
-					return handler.ErrorStatus(http.StatusNotFound)
-				}
-				return handler.Errorf("download torrent: %s", err)
-			}
-			f, err = s.cads.Cache().GetFileReader(d.Hex())
-			if err != nil {
-				return handler.Errorf("store: %s", err)
-			}
-		} else {
-			return handler.Errorf("store: %s", err)
+	f, err := s.diskStore.ScopeComplete().Open(d.Hex())
+	if err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, store.ErrOutOfScope) {
+		return handler.Errorf("store open: %s", err)
+	}
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, store.ErrOutOfScope) {
+		err := s.sched.Download(namespace, d)
+		if err == scheduler.ErrTorrentNotFound {
+			return handler.ErrorStatus(http.StatusNotFound)
+		}
+		if err != nil {
+			return handler.Errorf("download torrent: %s", err)
+		}
+
+		f, err = s.diskStore.ScopeComplete().Open(d.Hex())
+		if err != nil {
+			return handler.Errorf("store open: %s", err)
 		}
 	}
 	defer closers.Close(f)
