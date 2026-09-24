@@ -134,7 +134,9 @@ func NewClient(
 	}
 
 	ctx := context.Background()
-	newClientOpts := []option.ClientOption{option.WithCredentialsJSON([]byte(auth.GCS.AccessBlob))}
+	newClientOpts := []option.ClientOption{
+		option.WithAuthCredentialsJSON(option.ServiceAccount, []byte(auth.GCS.AccessBlob)),
+	}
 	if config.PrivateServiceConnect != "" {
 		newClientOpts = append(newClientOpts, option.WithEndpoint(config.PrivateServiceConnect))
 	}
