@@ -1,27 +1,32 @@
 ---
 name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: ''
-assignees: ''
-
+about: Report something that is not working as expected
+labels: bug
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+<!--
+Please fill in the sections below.
+Report security vulnerabilities privately: https://github.com/uber/kraken/security/advisories/new
+-->
 
-**To Reproduce**
-Steps to reproduce the behavior:
+### Description
 
+<!-- What happened, and what did you expect to happen? -->
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+### Steps to reproduce
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+<!-- How can the issue be reproduced? -->
 
-**Environments**
-e.g Kuberenetes, AWS, GCP, Data centers, laptop, etc.
+### Environment
 
-**Additional context**
-Add any other context about the problem here--environment configurations, logs, etc.
+<!-- Which Kraken version, OS, deployment method, and storage backend are you using? -->
+
+### Additional context
+
+<!-- Is there anything else that might help, such as logs, configuration, or related issues? -->
+
+### Checklist
+
+<!-- Put an x in the boxes that apply. -->
+
+- [ ] I plan to open a pull request to fix this
