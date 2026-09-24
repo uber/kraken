@@ -19,17 +19,17 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"time"
 
-	"github.com/uber/kraken/utils/closers"
-
+	"cloud.google.com/go/storage"
+	"cloud.google.com/go/storage/transfermanager"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/backend/namepath"
 	"github.com/uber/kraken/utils/log"
-
-	"cloud.google.com/go/storage"
+	"github.com/uber/kraken/utils/rwutil"
 	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -44,37 +44,45 @@ func init() {
 
 type factory struct{}
 
+// Name returns name of factory.
+func (f *factory) Name() string {
+	return _gcs
+}
+
+// Create returns a new gcsbackend client.
 func (f *factory) Create(
-	confRaw interface{}, masterAuthConfig backend.AuthConfig, stats tally.Scope, _ *zap.SugaredLogger) (backend.Client, error) {
+	confRaw interface{}, authConfRaw backend.AuthConfig, stats tally.Scope, logger *zap.SugaredLogger) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
-		return nil, errors.New("marshal gcs config")
+		return nil, fmt.Errorf("marshal gcs config: %w", err)
 	}
-	authConfBytes, err := yaml.Marshal(masterAuthConfig[_gcs])
+	authConfBytes, err := yaml.Marshal(authConfRaw[f.Name()])
 	if err != nil {
-		return nil, errors.New("marshal gcs auth config")
+		return nil, fmt.Errorf("marshal gcs auth config: %w", err)
 	}
 
 	var config Config
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
-		return nil, errors.New("unmarshal gcs config")
+		return nil, fmt.Errorf("unmarshal gcs config: %w", err)
 	}
 	var userAuth UserAuthConfig
 	if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
-		return nil, errors.New("unmarshal gcs auth config")
+		return nil, fmt.Errorf("unmarshal gcs auth config: %w", err)
 	}
 
-	return NewClient(config, userAuth, stats)
+	return NewClient(config, userAuth, stats, logger)
 }
 
-// Client implements a backend.Client for GCS.
+var _ backend.Client = &Client{}
+
+// Client implements a GCS client.
 type Client struct {
-	config  Config
-	pather  namepath.Pather
-	stats   tally.Scope
-	gcs     GCS
-	sClient *storage.Client
+	config Config
+	pather namepath.Pather
+	gcs    GCS
+	stats  tally.Scope
+	logger *zap.SugaredLogger
 }
 
 // Option allows setting optional Client parameters.
@@ -87,7 +95,7 @@ func WithGCS(gcs GCS) Option {
 
 // NewClient creates a new Client for GCS.
 func NewClient(
-	config Config, userAuth UserAuthConfig, stats tally.Scope, opts ...Option) (*Client, error) {
+	config Config, userAuth UserAuthConfig, stats tally.Scope, logger *zap.SugaredLogger, opts ...Option) (*Client, error) {
 
 	config.applyDefaults()
 	if config.Username == "" {
@@ -96,8 +104,8 @@ func NewClient(
 	if config.Bucket == "" {
 		return nil, errors.New("invalid config: bucket required")
 	}
-	if !path.IsAbs(config.RootDirectory) {
-		return nil, errors.New("invalid config: root_directory must be absolute path")
+	if path.IsAbs(config.RootDirectory) {
+		return nil, errors.New("invalid config: root_directory must not start with '/'")
 	}
 
 	pather, err := namepath.New(config.RootDirectory, config.NamePath)
@@ -113,11 +121,11 @@ func NewClient(
 	if len(opts) > 0 {
 		// For mock.
 		client := &Client{
-			config:  config,
-			pather:  pather,
-			stats:   stats,
-			gcs:     nil,
-			sClient: nil,
+			gcs:    nil,
+			config: config,
+			pather: pather,
+			stats:  stats,
+			logger: logger,
 		}
 		for _, opt := range opts {
 			opt(client)
@@ -126,18 +134,27 @@ func NewClient(
 	}
 
 	ctx := context.Background()
-	sClient, err := storage.NewClient(ctx,
-		option.WithCredentialsJSON([]byte(auth.GCS.AccessBlob)))
+	newClientOpts := []option.ClientOption{option.WithCredentialsJSON([]byte(auth.GCS.AccessBlob))}
+	if config.PrivateServiceConnect != "" {
+		newClientOpts = append(newClientOpts, option.WithEndpoint(config.PrivateServiceConnect))
+	}
+
+	sClient, err := storage.NewClient(ctx, newClientOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("invalid gcs credentials: %s", err)
+		return nil, fmt.Errorf("new client: %s", err)
+	}
+
+	gcsImpl, err := NewGCS(ctx, sClient, &config)
+	if err != nil {
+		return nil, fmt.Errorf("new gcs: %w", err)
 	}
 
 	client := &Client{
-		config:  config,
-		pather:  pather,
-		stats:   stats,
-		gcs:     NewGCS(ctx, sClient.Bucket(config.Bucket), &config),
-		sClient: sClient,
+		gcs:    gcsImpl,
+		config: config,
+		pather: pather,
+		stats:  stats,
+		logger: logger,
 	}
 
 	log.Infof("Initalized GCS backend with config: %s", config)
@@ -170,8 +187,23 @@ func (c *Client) Download(namespace, name string, dst io.Writer) error {
 		return fmt.Errorf("blob path: %s", err)
 	}
 
-	_, err = c.gcs.Download(path, dst)
-	return err
+	writerAt, ok := dst.(io.WriterAt)
+	if !ok {
+		// TODO - consider returning an error here, instead of silently downloading into memory.
+		writerAt = rwutil.NewCappedBuffer(int(c.config.BufferGuard))
+	}
+
+	_, err = c.gcs.Download(path, writerAt)
+	if err != nil {
+		return err
+	}
+
+	if capBuf, ok := writerAt.(*rwutil.CappedBuffer); ok {
+		if err = capBuf.DrainInto(dst); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Upload uploads src to a configured bucket.
@@ -228,60 +260,89 @@ func (c *Client) List(prefix string, opts ...backend.ListOption) (*backend.ListR
 	return result, nil
 }
 
-// Close closes the storage client
 func (c *Client) Close() error {
-	if c.sClient == nil {
+	if c.gcs == nil {
 		return nil
 	}
-	return c.sClient.Close()
+	return c.gcs.Close()
 }
 
 // isObjectNotFound is helper function for identify non-existing object error.
 func isObjectNotFound(err error) bool {
-	return err == storage.ErrObjectNotExist || err == storage.ErrBucketNotExist
+	return errors.Is(err, storage.ErrObjectNotExist) || errors.Is(err, storage.ErrBucketNotExist)
 }
 
 // GCSImpl implements GCS interaface.
 type GCSImpl struct {
-	ctx    context.Context
-	bucket *storage.BucketHandle
-	config *Config
+	ctx           context.Context
+	storageClient *storage.Client
+	config        *Config
+	downloader    *transfermanager.Downloader
 }
 
-func NewGCS(ctx context.Context, bucket *storage.BucketHandle,
-	config *Config) *GCSImpl {
-
-	return &GCSImpl{ctx, bucket, config}
+// NewGCS returns a new GCSImpl.
+func NewGCS(ctx context.Context, storageClient *storage.Client, config *Config) (*GCSImpl, error) {
+	downloader, err := transfermanager.NewDownloader(
+		storageClient,
+		transfermanager.WithWorkers(config.DownloadConcurrency),
+		transfermanager.WithPartSize(int64(config.DownloadPartSize)),
+		transfermanager.WithCallbacks(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new transfermanager downloader: %w", err)
+	}
+	return &GCSImpl{ctx, storageClient, config, downloader}, nil
 }
 
+// ObjectAttrs implements interface GCS.
 func (g *GCSImpl) ObjectAttrs(objectName string) (*storage.ObjectAttrs, error) {
-	handle := g.bucket.Object(objectName)
+	handle := g.storageClient.Bucket(g.config.Bucket).Object(objectName)
 	return handle.Attrs(g.ctx)
 }
 
-func (g *GCSImpl) Download(objectName string, w io.Writer) (int64, error) {
-	rc, err := g.bucket.Object(objectName).NewReader(g.ctx)
+// Download implements interface GCS.
+func (g *GCSImpl) Download(objectName string, w io.WriterAt) (int64, error) {
+	ctx, cancel := context.WithTimeout(g.ctx, time.Duration(g.config.DownloadTimeoutSeconds)*time.Second)
+	defer cancel()
+
+	downloadOutput := make(chan *transfermanager.DownloadOutput)
+	defer close(downloadOutput)
+	in := &transfermanager.DownloadObjectInput{
+		Bucket:      g.config.Bucket,
+		Object:      objectName,
+		Destination: w,
+		Callback: func(o *transfermanager.DownloadOutput) {
+			downloadOutput <- o
+		},
+	}
+
+	err := g.downloader.DownloadObject(ctx, in)
+	if err != nil {
+		return 0, fmt.Errorf("download object: %w", err)
+	}
+
+	result := <-downloadOutput
+	if result == nil {
+		return 0, fmt.Errorf("unexpected error happened for path %q", objectName)
+	}
+	err = result.Err
 	if err != nil {
 		if isObjectNotFound(err) {
 			return 0, backenderrors.ErrBlobNotFound
 		}
-		return 0, err
-	}
-	defer closers.Close(rc)
-
-	r, err := io.CopyN(w, rc, int64(g.config.BufferGuard))
-	if err != nil && err != io.EOF {
-		return 0, err
+		return 0, fmt.Errorf("wait downloads: %w", err)
 	}
 
-	return r, nil
+	return result.Attrs.Size, nil
 }
 
+// Upload implements interface GCS.
 func (g *GCSImpl) Upload(objectName string, r io.Reader) (int64, error) {
-	wc := g.bucket.Object(objectName).NewWriter(g.ctx)
+	wc := g.storageClient.Bucket(g.config.Bucket).Object(objectName).NewWriter(g.ctx)
+	wc.ContentType = "binary/octet-stream"
 	wc.ChunkSize = int(g.config.UploadChunkSize)
 
-	w, err := io.CopyN(wc, r, int64(g.config.UploadChunkSize))
+	w, err := io.Copy(wc, r)
 	if err != nil && err != io.EOF {
 		return 0, err
 	}
@@ -293,13 +354,15 @@ func (g *GCSImpl) Upload(objectName string, r io.Reader) (int64, error) {
 	return w, nil
 }
 
+// GetObjectIterator implements interface GCS.
 func (g *GCSImpl) GetObjectIterator(prefix string) iterator.Pageable {
 	var query storage.Query
 
 	query.Prefix = prefix
-	return g.bucket.Objects(g.ctx, &query)
+	return g.storageClient.Bucket(g.config.Bucket).Objects(g.ctx, &query)
 }
 
+// NextPage implements interface GCS.
 func (g *GCSImpl) NextPage(pager *iterator.Pager) ([]string, string,
 	error) {
 
@@ -314,4 +377,21 @@ func (g *GCSImpl) NextPage(pager *iterator.Pager) ([]string, string,
 		names[idx] = objectAttr.Name
 	}
 	return names, continuationToken, nil
+}
+
+func (g *GCSImpl) Close() error {
+	totalErrors := make([]error, 0)
+	if g.downloader != nil {
+		_, err := g.downloader.WaitAndClose()
+		if err != nil {
+			totalErrors = append(totalErrors, err)
+		}
+	}
+	if g.storageClient != nil {
+		totalErrors = append(totalErrors, g.storageClient.Close())
+	}
+	if len(totalErrors) > 0 {
+		return errors.Join(totalErrors...)
+	}
+	return nil
 }
