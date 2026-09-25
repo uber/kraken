@@ -1,0 +1,40 @@
+name: Publish images
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: ghcr.io/uber
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push images
+        run: make publish REGISTRY=${{ env.REGISTRY }}
+
+      - name: Also tag and push latest
+        run: |
+          version=$(git describe --always --tags)
+          for component in agent build-index origin proxy testfs tracker herd; do
+            docker tag "${REGISTRY}/kraken-${component}:${version}" "${REGISTRY}/kraken-${component}:latest"
+            docker push "${REGISTRY}/kraken-${component}:latest"
+          done
