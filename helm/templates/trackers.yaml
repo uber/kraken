@@ -22,7 +22,7 @@ spec:
     spec:
       {{ with .Values.tracker.initContainers -}}
       initContainers:
-{{ tpl . $ | indent 6 }}{{- end }}
+{{ toYaml . | indent 6 }}{{ end }}
       containers:
       - name: redis
         image: redis:5.0
