@@ -1,5 +1,7 @@
 FROM debian:12
 LABEL org.opencontainers.image.source=https://github.com/uber/kraken
+LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.description="The Kraken agent runs on every host in the cluster. The agent implements the Docker registry API. The agent connects to peers and downloads blobs through the Kraken P2P protocol. Production deployments run this component on each host."
 
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \
     echo 'Acquire::AllowInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99no-check-valid-until && \

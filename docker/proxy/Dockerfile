@@ -1,5 +1,7 @@
 FROM debian:12
 LABEL org.opencontainers.image.source=https://github.com/uber/kraken
+LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.description="The Kraken proxy component receives image layer uploads from a Docker client. The component sends each layer to the origin instance that owns it. The component sends tag uploads to the build-index component. Production deployments run this component."
 
 # Fix repository configuration for Debian 12 (bookworm) with multiple mirrors and better retry logic
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \

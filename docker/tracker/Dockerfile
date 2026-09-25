@@ -1,5 +1,7 @@
 FROM debian:12
 LABEL org.opencontainers.image.source=https://github.com/uber/kraken
+LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.description="The Kraken tracker component tracks which peers store which blob content. The component returns a list of peers for a client to connect to. The component does not transfer blob data itself. Production deployments run this component."
 
 # Fix repository configuration for Debian 12 (bookworm) with multiple mirrors and better retry logic
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \
