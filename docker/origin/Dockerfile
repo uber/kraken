@@ -1,4 +1,5 @@
 FROM debian:12
+LABEL org.opencontainers.image.source=https://github.com/uber/kraken
 
 # Fix repository configuration for Debian 12 (bookworm) with multiple mirrors and better retry logic
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \

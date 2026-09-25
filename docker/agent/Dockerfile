@@ -1,4 +1,5 @@
 FROM debian:12
+LABEL org.opencontainers.image.source=https://github.com/uber/kraken
 
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \
     echo 'Acquire::AllowInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99no-check-valid-until && \
