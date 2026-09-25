@@ -115,9 +115,9 @@ For information about how to configure and use Kraken, please refer to the [docu
 ## Kraken on Kubernetes
 
 You can use our example Helm chart to deploy Kraken (with an example HTTP fileserver backend) on
-your k8s cluster:
+your k8s cluster. Requires Helm 3.x:
 ```
-$ helm install --name=kraken-demo ./helm
+$ helm install kraken-demo ./helm
 ```
 Once deployed, every node will have a docker registry API exposed on `localhost:30081`.
 For example pod spec that pulls images from Kraken agent, see [example](examples/k8s/demo.json).

@@ -1,6 +1,8 @@
 ## 1. Run
 
-`$ helm install --name=kraken-demo ./helm`
+Requires Helm 3.x:
+
+`$ helm install kraken-demo ./helm`
 
 This command starts 3 trackers, origins and build-index pods, 1 proxy pod and an agent daemonset.
 
