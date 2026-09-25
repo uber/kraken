@@ -1,5 +1,7 @@
 FROM debian:12
 LABEL org.opencontainers.image.source=https://github.com/uber/kraken
+LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.description="The Kraken build-index component maps a tag to a blob digest. The component stores this mapping on a pluggable backend, for example S3 or GCS. The component supports tag replication between clusters. Production deployments run this component."
 
 # Fix repository configuration for Debian 12 (bookworm) with multiple mirrors and better retry logic
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \

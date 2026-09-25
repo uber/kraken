@@ -1,5 +1,7 @@
 FROM debian:12
 LABEL org.opencontainers.image.source=https://github.com/uber/kraken
+LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.description="The Kraken origin component stores blob content on disk. The component seeds this content to agents through the Kraken P2P protocol. The component forms a self-healing hash ring with other origin instances. Production deployments run this component."
 
 # Fix repository configuration for Debian 12 (bookworm) with multiple mirrors and better retry logic
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \
