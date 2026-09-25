@@ -1,3 +1,4 @@
+apiVersion: v2
 name: kraken
 description: P2P Docker registry capable of distributing TBs of data in seconds
 version: 0.2.0
