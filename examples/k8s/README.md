@@ -49,36 +49,46 @@ Run this from the root of the repository:
 $ make images
 ```
 
-This command builds all 7 component images. Load them into your cluster.
+This command builds all 7 component images. It tags each image as `kraken-<component>:dev` on
+your machine.
+
+The Helm chart needs each image name in the form `<repository>/kraken-<component>:<tag>`. Add a
+local repository prefix to each image:
+
+```
+$ docker tag kraken-agent:dev local/kraken-agent:dev
+$ docker tag kraken-build-index:dev local/kraken-build-index:dev
+$ docker tag kraken-origin:dev local/kraken-origin:dev
+$ docker tag kraken-proxy:dev local/kraken-proxy:dev
+$ docker tag kraken-testfs:dev local/kraken-testfs:dev
+$ docker tag kraken-tracker:dev local/kraken-tracker:dev
+$ docker tag kraken-herd:dev local/kraken-herd:dev
+```
+
+Load the tagged images into your cluster.
 
 For `kind`:
 
 ```
-$ kind load docker-image gcr.io/uber-container-tools/kraken-agent:<tag>
-$ kind load docker-image gcr.io/uber-container-tools/kraken-build-index:<tag>
-$ kind load docker-image gcr.io/uber-container-tools/kraken-origin:<tag>
-$ kind load docker-image gcr.io/uber-container-tools/kraken-proxy:<tag>
-$ kind load docker-image gcr.io/uber-container-tools/kraken-testfs:<tag>
-$ kind load docker-image gcr.io/uber-container-tools/kraken-tracker:<tag>
-$ kind load docker-image gcr.io/uber-container-tools/kraken-herd:<tag>
+$ kind load docker-image local/kraken-agent:dev
+$ kind load docker-image local/kraken-build-index:dev
+$ kind load docker-image local/kraken-origin:dev
+$ kind load docker-image local/kraken-proxy:dev
+$ kind load docker-image local/kraken-testfs:dev
+$ kind load docker-image local/kraken-tracker:dev
+$ kind load docker-image local/kraken-herd:dev
 ```
 
 For `minikube`:
 
 ```
-$ minikube image load gcr.io/uber-container-tools/kraken-agent:<tag>
-$ minikube image load gcr.io/uber-container-tools/kraken-build-index:<tag>
-$ minikube image load gcr.io/uber-container-tools/kraken-origin:<tag>
-$ minikube image load gcr.io/uber-container-tools/kraken-proxy:<tag>
-$ minikube image load gcr.io/uber-container-tools/kraken-testfs:<tag>
-$ minikube image load gcr.io/uber-container-tools/kraken-tracker:<tag>
-$ minikube image load gcr.io/uber-container-tools/kraken-herd:<tag>
-```
-
-Find `<tag>` with this command:
-
-```
-$ git describe --always --tags
+$ minikube image load local/kraken-agent:dev
+$ minikube image load local/kraken-build-index:dev
+$ minikube image load local/kraken-origin:dev
+$ minikube image load local/kraken-proxy:dev
+$ minikube image load local/kraken-testfs:dev
+$ minikube image load local/kraken-tracker:dev
+$ minikube image load local/kraken-herd:dev
 ```
 
 ## 4. Install Kraken with Helm
@@ -93,12 +103,10 @@ $ helm install kraken-demo ./helm
 
 ```
 $ helm install kraken-demo ./helm \
-    --set kraken.repository=gcr.io/uber-container-tools \
-    --set kraken.tag=<tag> \
+    --set kraken.repository=local \
+    --set kraken.tag=dev \
     --set kraken.imagePullPolicy=Never
 ```
-
-Use the same `<tag>` value from step 3.
 
 This command starts 3 tracker pods, 3 origin pods, 3 build-index pods, 1 proxy pod, and an
 agent daemonset.
