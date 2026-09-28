@@ -1,4 +1,7 @@
 FROM debian:12
+LABEL org.opencontainers.image.source=https://github.com/uber/kraken
+LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.description="The Kraken testfs component runs a simple HTTP file server. Integration tests use this component as a storage backend. Production deployments do not use this component."
 
 # Fix repository configuration for Debian 12 (bookworm) with CDN mirror for better stability
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \

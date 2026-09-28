@@ -1,6 +1,9 @@
 # This image combines all central components into one container, for easier
 # deployment and management.
 FROM debian:12
+LABEL org.opencontainers.image.source=https://github.com/uber/kraken
+LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.description="The Kraken herd component combines the origin, tracker, build-index, and proxy components in one container. Developers use this component for local development and small test clusters. Production deployments run each component in a separate container instead of this component."
 
 # Fix repository configuration for Debian 12 (bookworm) with multiple mirrors and better retry logic
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \
