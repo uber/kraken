@@ -1,0 +1,5 @@
+blank_issues_enabled: false # Require a template for everyone except maintainers.
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/uber/kraken/security/advisories/new # Link to private vulnerability reporting in the Security tab.
+    about: Report vulnerabilities privately instead of opening a public issue.
