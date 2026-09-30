@@ -5,6 +5,8 @@ Install these tools before you start.
 - `kubectl`. See the [kubectl install guide](https://kubernetes.io/docs/tasks/tools/#kubectl).
 - Helm 3.x. See the [Helm install guide](https://helm.sh/docs/intro/install/).
 - A local Kubernetes cluster. Use `kind` or `minikube`. See step 2.
+- `crane` (optional). Step 6 needs this tool to push and pull a test image. See the
+  [crane install guide](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md).
 
 ## 2. Start a local cluster
 
@@ -51,81 +53,19 @@ Done! kubectl is now configured to use "minikube" cluster and "default" namespac
 
 ## 3. Get the Kraken images
 
-Kraken publishes component images to `ghcr.io/uber`. The Helm chart uses this registry by
-default. If `ghcr.io/uber` does not allow anonymous pulls yet, build the images yourself with
-the steps below.
-
-### Option A: use the published images
-
-The chart's default values already point at `ghcr.io/uber`. You do not need extra steps. Go to
-step 4.
-
-### Option B: build the images yourself
-
-Run this from the root of the repository:
-
-```
-$ make images
-```
-
-This command builds all 7 component images. It tags each image as `kraken-<component>:dev` on
-your machine.
-
-The Helm chart needs each image name in the form `<repository>/kraken-<component>:<tag>`. Add a
-local repository prefix to each image:
-
-```
-$ docker tag kraken-agent:dev local/kraken-agent:dev
-$ docker tag kraken-build-index:dev local/kraken-build-index:dev
-$ docker tag kraken-origin:dev local/kraken-origin:dev
-$ docker tag kraken-proxy:dev local/kraken-proxy:dev
-$ docker tag kraken-testfs:dev local/kraken-testfs:dev
-$ docker tag kraken-tracker:dev local/kraken-tracker:dev
-$ docker tag kraken-herd:dev local/kraken-herd:dev
-```
-
-Load the tagged images into your cluster.
-
-For `kind`:
-
-```
-$ kind load docker-image local/kraken-agent:dev
-$ kind load docker-image local/kraken-build-index:dev
-$ kind load docker-image local/kraken-origin:dev
-$ kind load docker-image local/kraken-proxy:dev
-$ kind load docker-image local/kraken-testfs:dev
-$ kind load docker-image local/kraken-tracker:dev
-$ kind load docker-image local/kraken-herd:dev
-```
-
-For `minikube`:
-
-```
-$ minikube image load local/kraken-agent:dev
-$ minikube image load local/kraken-build-index:dev
-$ minikube image load local/kraken-origin:dev
-$ minikube image load local/kraken-proxy:dev
-$ minikube image load local/kraken-testfs:dev
-$ minikube image load local/kraken-tracker:dev
-$ minikube image load local/kraken-herd:dev
-```
+Kraken publishes component images to `ghcr.io/uber`. The Helm chart's default values already
+point at this registry. You do not need to build or load any image yourself. If you want to
+test a local change to Kraken instead, see [Appendix: build images locally](#appendix-build-images-locally).
 
 ## 4. Install Kraken with Helm
-
-### If you use the published images (step 3, Option A)
 
 ```
 $ helm install kraken-demo ./helm
 ```
 
-### If you built the images yourself (step 3, Option B)
-
-```
-$ helm install kraken-demo ./helm \
-    --set kraken.repository=local \
-    --set kraken.tag=dev \
-    --set kraken.imagePullPolicy=Never
-```
+If you built your own images, see
+[Appendix: build images locally](#appendix-build-images-locally) for the install command to use
+instead.
 
 Expected output:
 
@@ -168,8 +108,8 @@ kraken-tracker-xxxxxxxxxx-xxxxx       2/2     Running   0          74s
 ```
 
 The agent and proxy pods may restart once or twice at startup. This is normal. They wait for
-the tracker and origin pods to start first. See the Troubleshooting Guide if a pod does not
-reach `Running` after 2 minutes.
+the tracker and origin pods to start first. See the [Troubleshooting Guide](#troubleshooting-guide)
+if a pod does not reach `Running` after 2 minutes.
 
 ## 6. Push and pull a test image
 
@@ -188,17 +128,18 @@ connections from `127.0.0.1` and `172.17.0.1`. A direct connection to the `30081
 your host machine may not match this rule and may fail with a `403` error. A port-forwarded
 connection always matches the rule.
 
-Install `crane`, a small tool for pushing and pulling container images. See the
-[crane install guide](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md).
-`crane` needs no Docker daemon configuration change. If you prefer to use the `docker` command
-instead, see the
-[Docker insecure registry guide](https://docs.docker.com/registry/insecure/) to allow `docker
-push` and `docker pull` against a local HTTP registry.
+This step uses `crane`, a small tool for pushing and pulling container images. See the
+[crane install guide](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md)
+if you did not install it in step 1. `crane` needs no Docker daemon configuration change. If you
+prefer to use the `docker` command instead, see the
+[Docker insecure registry guide](https://docs.docker.com/reference/cli/dockerd/#insecure-registries)
+to allow `docker push` and `docker pull` against a local HTTP registry.
 
-Save any local image as a tarball, then push it through the Kraken proxy:
+Pull a small test image, save it as a tarball, then push it through the Kraken proxy:
 
 ```
-$ docker save <your-image>:<tag> -o /tmp/test-image.tar
+$ docker pull alpine:latest
+$ docker save alpine:latest -o /tmp/test-image.tar
 $ crane push --insecure /tmp/test-image.tar 127.0.0.1/test/hello:v1
 ```
 
@@ -230,16 +171,99 @@ After you set this value, redeploy with `helm upgrade`. A pod that names an imag
 `127.0.0.1:30081/library/<image>` can then pull that image through Kraken. See
 [demo.json](demo.json) for an example pod spec.
 
+## Teardown
+
+Remove the Helm release:
+
+```
+$ helm uninstall kraken-demo
+```
+
+Delete the cluster.
+
+For `kind`:
+
+```
+$ kind delete cluster
+```
+
+For `minikube`:
+
+```
+$ minikube delete
+```
+
+## Appendix: build images locally
+
+Use this section only if you want to test a local change to Kraken, instead of the published
+`ghcr.io/uber` images from step 3.
+
+Run this from the root of the repository:
+
+```
+$ make images
+```
+
+This command builds all 7 component images. It tags each image as `kraken-<component>:dev` on
+your machine. The Helm chart deploys 6 of these images: `agent`, `build-index`, `origin`,
+`proxy`, `tracker`, and `testfs`. The chart does not deploy the `herd` image; `herd` is a
+combined image used only by [devcluster](../devcluster/README.md), so you can skip it here.
+
+The Helm chart needs each image name in the form `<repository>/kraken-<component>:<tag>`. Add a
+local repository prefix to each image the chart deploys:
+
+```
+$ docker tag kraken-agent:dev local/kraken-agent:dev
+$ docker tag kraken-build-index:dev local/kraken-build-index:dev
+$ docker tag kraken-origin:dev local/kraken-origin:dev
+$ docker tag kraken-proxy:dev local/kraken-proxy:dev
+$ docker tag kraken-tracker:dev local/kraken-tracker:dev
+$ docker tag kraken-testfs:dev local/kraken-testfs:dev
+```
+
+Load the tagged images into your cluster.
+
+For `kind`:
+
+```
+$ kind load docker-image local/kraken-agent:dev
+$ kind load docker-image local/kraken-build-index:dev
+$ kind load docker-image local/kraken-origin:dev
+$ kind load docker-image local/kraken-proxy:dev
+$ kind load docker-image local/kraken-testfs:dev
+$ kind load docker-image local/kraken-tracker:dev
+```
+
+For `minikube`:
+
+```
+$ minikube image load local/kraken-agent:dev
+$ minikube image load local/kraken-build-index:dev
+$ minikube image load local/kraken-origin:dev
+$ minikube image load local/kraken-proxy:dev
+$ minikube image load local/kraken-testfs:dev
+$ minikube image load local/kraken-tracker:dev
+```
+
+Install with the local images:
+
+```
+$ helm install kraken-demo ./helm \
+    --set kraken.repository=local \
+    --set kraken.tag=dev \
+    --set kraken.imagePullPolicy=Never
+```
+
 ## Troubleshooting Guide
 
 ### A pod stays in `ImagePullBackOff`
 
 The image name or tag is wrong, or the image is private.
 
-- If you used step 3, Option A, check that `ghcr.io/uber` allows anonymous pulls. Run
-  `docker pull ghcr.io/uber/kraken-agent:latest` on your machine. If this command fails, use
-  step 3, Option B instead.
-- If you used step 3, Option B, check that you loaded every image into your cluster. Run
+- If you used the default install command from step 4, check that `ghcr.io/uber` allows
+  anonymous pulls. Run `docker pull ghcr.io/uber/kraken-agent:latest` on your machine. If this
+  command fails, use [Appendix: build images locally](#appendix-build-images-locally) instead.
+- If you built your own images, check that you loaded every image into your cluster. Run
   `kind load docker-image local/kraken-agent:dev` again for any missing image. Check that
   `--set kraken.imagePullPolicy=Never` is in your `helm install` command. Without this flag,
   Kubernetes tries to pull the image from a remote registry instead of using the loaded image.
