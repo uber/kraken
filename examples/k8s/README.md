@@ -2,6 +2,10 @@
 
 Install these tools before you start.
 
+- Git. Clone the repository, then `cd` into it. This guide runs every command from the
+  repository root: `git clone https://github.com/uber/kraken.git && cd kraken`.
+- Docker. Step 6 needs this tool to save a test image. See the
+  [Docker install guide](https://docs.docker.com/get-started/get-docker/).
 - `kubectl`. See the [kubectl install guide](https://kubernetes.io/docs/tasks/tools/#kubectl).
 - Helm 3.x. See the [Helm install guide](https://helm.sh/docs/intro/install/).
 - A local Kubernetes cluster. Use `kind` or `minikube`. See step 2.
@@ -16,10 +20,10 @@ Pick one tool. Both work with the steps below.
 
 Install `kind` from the [kind quick start guide](https://kind.sigs.k8s.io/docs/user/quick-start/#installation).
 
-Create a cluster:
+Create a cluster. Name it `kraken-e2e`, so the teardown step targets the right cluster:
 
 ```
-$ kind create cluster
+$ kind create cluster --name kraken-e2e
 ```
 
 Expected output:
@@ -32,17 +36,17 @@ Creating cluster "kind" ...
  ✓ Starting control-plane 🕹️
  ✓ Installing CNI 🔌
  ✓ Installing StorageClass 💾
-Set kubectl context to "kind-kind"
+Set kubectl context to "kind-kraken-e2e"
 ```
 
 ### Option B: minikube
 
 Install `minikube` from the [minikube start guide](https://minikube.sigs.k8s.io/docs/start/).
 
-Create a cluster:
+Create a cluster. Name it `kraken-e2e`, so the teardown step targets the right cluster:
 
 ```
-$ minikube start --driver=docker
+$ minikube start -p kraken-e2e --driver=docker
 ```
 
 Expected output ends with a line like this:
@@ -173,6 +177,9 @@ After you set this value, redeploy with `helm upgrade`. A pod that names an imag
 
 ## Teardown
 
+Stop each `kubectl port-forward` command from step 6. Press `Ctrl+C` in its terminal, or run
+`kill %1 %2` if you started them in the background.
+
 Remove the Helm release:
 
 ```
@@ -184,13 +191,13 @@ Delete the cluster.
 For `kind`:
 
 ```
-$ kind delete cluster
+$ kind delete cluster --name kraken-e2e
 ```
 
 For `minikube`:
 
 ```
-$ minikube delete
+$ minikube delete -p kraken-e2e
 ```
 
 ## Appendix: build images locally
@@ -252,6 +259,15 @@ $ helm install kraken-demo ./helm \
     --set kraken.repository=local \
     --set kraken.tag=dev \
     --set kraken.imagePullPolicy=Never
+```
+
+After teardown, remove the local images from your machine:
+
+```
+$ docker rmi local/kraken-agent:dev local/kraken-build-index:dev local/kraken-origin:dev \
+    local/kraken-proxy:dev local/kraken-tracker:dev local/kraken-testfs:dev \
+    kraken-agent:dev kraken-build-index:dev kraken-origin:dev kraken-proxy:dev \
+    kraken-tracker:dev kraken-testfs:dev kraken-herd:dev
 ```
 
 ## Troubleshooting Guide
