@@ -2,14 +2,13 @@
 
 Install these tools before you start.
 
-- Git. Clone the repository, then `cd` into it. This guide runs every command from the
-  repository root: `git clone https://github.com/uber/kraken.git && cd kraken`.
-- Docker. Step 6 needs this tool to save a test image. See the
-  [Docker install guide](https://docs.docker.com/get-started/get-docker/).
+- Git. Clone the repository, then `cd` into it: `git clone https://github.com/uber/kraken.git
+  && cd kraken`.
+- Docker. See the [Docker install guide](https://docs.docker.com/get-started/get-docker/).
 - `kubectl`. See the [kubectl install guide](https://kubernetes.io/docs/tasks/tools/#kubectl).
 - Helm 3.x. See the [Helm install guide](https://helm.sh/docs/intro/install/).
 - A local Kubernetes cluster. Use `kind` or `minikube`. See step 2.
-- `crane` (optional). Step 6 needs this tool to push and pull a test image. See the
+- `crane` (optional). See the
   [crane install guide](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md).
 
 ## 2. Start a local cluster
@@ -20,7 +19,7 @@ Pick one tool. Both work with the steps below.
 
 Install `kind` from the [kind quick start guide](https://kind.sigs.k8s.io/docs/user/quick-start/#installation).
 
-Create a cluster. Name it `kraken-e2e`, so the teardown step targets the right cluster:
+Create a cluster named `kraken-e2e`:
 
 ```
 $ kind create cluster --name kraken-e2e
@@ -43,7 +42,7 @@ Set kubectl context to "kind-kraken-e2e"
 
 Install `minikube` from the [minikube start guide](https://minikube.sigs.k8s.io/docs/start/).
 
-Create a cluster. Name it `kraken-e2e`, so the teardown step targets the right cluster:
+Create a cluster named `kraken-e2e`:
 
 ```
 $ minikube start -p kraken-e2e --driver=docker
@@ -133,9 +132,9 @@ your host machine may not match this rule and may fail with a `403` error. A por
 connection always matches the rule.
 
 This step uses `crane`, a small tool for pushing and pulling container images. See the
-[crane install guide](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md)
-if you did not install it in step 1. `crane` needs no Docker daemon configuration change. If you
-prefer to use the `docker` command instead, see the
+[crane install guide](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md).
+`crane` needs no Docker daemon configuration change. If you prefer to use the `docker` command
+instead, see the
 [Docker insecure registry guide](https://docs.docker.com/reference/cli/dockerd/#insecure-registries)
 to allow `docker push` and `docker pull` against a local HTTP registry.
 
@@ -214,7 +213,7 @@ $ make images
 This command builds all 7 component images. It tags each image as `kraken-<component>:dev` on
 your machine. The Helm chart deploys 6 of these images: `agent`, `build-index`, `origin`,
 `proxy`, `tracker`, and `testfs`. The chart does not deploy the `herd` image; `herd` is a
-combined image used only by [devcluster](../devcluster/README.md), so you can skip it here.
+combined image used only by [devcluster](../devcluster/README.md).
 
 The Helm chart needs each image name in the form `<repository>/kraken-<component>:<tag>`. Add a
 local repository prefix to each image the chart deploys:
