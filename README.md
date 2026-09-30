@@ -168,9 +168,8 @@ hope to make it compatible with BitTorrent again.
 # Limitations
 
 - If Docker registry throughput is not the bottleneck in your deployment workflow, switching to
-Kraken will not magically speed up your `docker pull`. To speed up `docker pull`, consider
-switching to [Makisu](https://github.com/uber/makisu) to improve layer reusability at build time, or
-tweak compression ratios, as `docker pull` spends most of the time on data decompression.
+Kraken will not magically speed up your `docker pull`. To speed up `docker pull`, tweak
+compression ratios, as `docker pull` spends most of the time on data decompression.
 - Mutating tags (e.g. updating a `latest` tag) is allowed, however, a few things will not work: tag
 lookups immediately afterwards will still return the old value due to Nginx caching, and replication
 probably won't trigger. We are working on supporting this functionality better. If you need tag
