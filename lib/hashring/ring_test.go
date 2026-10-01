@@ -243,6 +243,24 @@ func TestRingWaitForContainsDelayedSuccess(t *testing.T) {
 	require.NoError(err)
 }
 
+func TestRingWaitForContainsEmitsHistogramMetric(t *testing.T) {
+	require := require.New(t)
+
+	testScope := tally.NewTestScope("", nil)
+	r := New(Config{}, hostlist.Fixture("x:80"), healthcheck.IdentityFilter{}, testScope)
+
+	err := r.WaitForContains("x:80")
+	require.NoError(err)
+
+	histogram, ok := testScope.Snapshot().Histograms()["membership_wait_duration+module=hashring,version=2"]
+	require.True(ok)
+	durations := histogram.Durations()
+	require.Contains(durations, time.Second)
+	require.Contains(durations, time.Minute)
+	require.Equal(int64(1), durations[time.Second])
+	require.Equal(int64(0), durations[time.Minute])
+}
+
 func TestRingMembers(t *testing.T) {
 	require := require.New(t)
 
