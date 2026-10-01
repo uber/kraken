@@ -32,11 +32,25 @@ import (
 const (
 	_defaultWeight = 100
 
-	_membershipWaitMetric      = "membership_wait_duration"
-	_membershipWaitBuckets     = 10
-	_membershipWaitBucketWidth = 10 * time.Second
+	_membershipWaitDurationMetric = "membership_wait_duration"
+	_membershipWaitLogInterval    = time.Minute
+)
 
-	_membershipWaitLogInterval = time.Minute
+var (
+	_membershipWaitDurationBuckets = tally.DurationBuckets{
+		time.Second,
+		15 * time.Second,
+		30 * time.Second,
+		time.Minute,
+		2 * time.Minute,
+		5 * time.Minute,
+		10 * time.Minute,
+		20 * time.Minute,
+		30 * time.Minute,
+		40 * time.Minute,
+		50 * time.Minute,
+		time.Hour,
+	}
 )
 
 // Watcher allows clients to watch the ring for changes. Whenever membership
@@ -93,12 +107,15 @@ func New(
 
 	config.applyDefaults()
 	scope = scope.Tagged(map[string]string{"module": "hashring"})
-	buckets := tally.MustMakeLinearDurationBuckets(0, _membershipWaitBucketWidth, _membershipWaitBuckets)
+
+	membershipWaitDuration := scope.Tagged(map[string]string{
+		"version": "2",
+	}).Histogram(_membershipWaitDurationMetric, _membershipWaitDurationBuckets)
 	r := &ring{
 		config:                 config,
 		cluster:                cluster,
 		filter:                 filter,
-		membershipWaitDuration: scope.Histogram(_membershipWaitMetric, buckets),
+		membershipWaitDuration: membershipWaitDuration,
 	}
 
 	for _, opt := range opts {
