@@ -122,7 +122,8 @@ $ helm install kraken-demo ./helm
 Once deployed, every node will have a docker registry API exposed on `localhost:30081`.
 For example pod spec that pulls images from Kraken agent, see [example](examples/k8s/demo.json).
 
-For more information on k8s setup, see [README](examples/k8s/README.md).
+For a full local walkthrough, including how to start a `kind` or `minikube` cluster and test a
+push and a pull end to end, see [README](examples/k8s/README.md).
 
 ## Devcluster
 
