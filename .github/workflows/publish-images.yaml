@@ -7,11 +7,10 @@ on:
   workflow_dispatch: {}
 
 env:
-  REGISTRY: ghcr.io/uber
+  IMAGE: docker.io/uber/kraken
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   publish:
@@ -21,20 +20,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Log in to GHCR
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push images
-        run: make publish REGISTRY=${{ env.REGISTRY }}
+      - name: Build images
+        run: make images
 
-      - name: Also tag and push latest
+      - name: Tag and push images
         run: |
           version=$(git describe --always --tags)
-          for component in agent build-index origin proxy testfs tracker herd; do
-            docker tag "${REGISTRY}/kraken-${component}:${version}" "${REGISTRY}/kraken-${component}:latest"
-            docker push "${REGISTRY}/kraken-${component}:latest"
+          for component in agent build-index origin proxy testfs tracker; do
+            for tag in "${version}" latest; do
+              docker tag "kraken-${component}:${version}" "${IMAGE}:${component}-${tag}"
+              docker push "${IMAGE}:${component}-${tag}"
+            done
           done
