@@ -16,6 +16,7 @@ package namepath
 import (
 	"testing"
 
+	"github.com/docker/distribution/reference"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,6 +64,9 @@ func TestDockerTagErrors(t *testing.T) {
 		":",
 		"repo:",
 		":tag",
+		"a:b:c",
+		"FOO:bar",
+		"../../../..:tag",
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := DockerTagPather{"/"}.BlobPath(name)
@@ -80,6 +84,29 @@ func TestShardedDockerBlobErrors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := ShardedDockerBlobPather{"/"}.BlobPath(name)
 			require.Error(t, err)
+		})
+	}
+}
+
+func TestValidateDockerRepo(t *testing.T) {
+	tests := []struct {
+		give    string
+		wantErr error
+	}{
+		{give: "valid-repo"},
+		{give: "FOO", wantErr: reference.ErrReferenceInvalidFormat},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.give, func(t *testing.T) {
+			require := require.New(t)
+
+			err := ValidateDockerRepo(tt.give)
+			if tt.wantErr != nil {
+				require.ErrorIs(err, tt.wantErr)
+				return
+			}
+			require.NoError(err)
 		})
 	}
 }

@@ -19,6 +19,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/docker/distribution/reference"
 )
 
 // Pather id strings.
@@ -68,17 +70,9 @@ func (p DockerTagPather) BasePath() string {
 
 // BlobPath interprets name as a "repo:tag" and generates a registry path for it.
 func (p DockerTagPather) BlobPath(name string) (string, error) {
-	tokens := strings.Split(name, ":")
-	if len(tokens) != 2 {
-		return "", errors.New("name must be in format 'repo:tag'")
-	}
-	repo := tokens[0]
-	if len(repo) == 0 {
-		return "", errors.New("repo must be non-empty")
-	}
-	tag := tokens[1]
-	if len(tag) == 0 {
-		return "", errors.New("tag must be non-empty")
+	repo, tag, err := ParseDockerTag(name)
+	if err != nil {
+		return "", fmt.Errorf("parse tag: %w", err)
 	}
 	return path.Join(p.BasePath(), repo, "_manifests/tags", tag, "current/link"), nil
 }
@@ -93,6 +87,32 @@ func (p DockerTagPather) NameFromBlobPath(bp string) (string, error) {
 	repo := matches[1]
 	tag := matches[2]
 	return fmt.Sprintf("%s:%s", repo, tag), nil
+}
+
+// ParseDockerTag interprets name as "repo:tag" and extracts the repo and tag
+// according to Docker's spec.
+func ParseDockerTag(name string) (repo, tag string, err error) {
+	tokens := strings.Split(name, ":")
+	if len(tokens) != 2 {
+		return "", "", errors.New("name must be in format 'repo:tag'")
+	}
+	repo = tokens[0]
+	tag = tokens[1]
+	named, err := reference.WithName(repo)
+	if err != nil {
+		return "", "", fmt.Errorf("parse repo: %w", err)
+	}
+	if _, err := reference.WithTag(named, tag); err != nil {
+		return "", "", fmt.Errorf("parse tag: %w", err)
+	}
+	return repo, tag, nil
+}
+
+// ValidateDockerRepo checks whether the repository is valid according to
+// Docker's spec.
+func ValidateDockerRepo(repo string) error {
+	_, err := reference.WithName(repo)
+	return err
 }
 
 // ShardedDockerBlobPather generates sharded paths for Docker blobs.

@@ -253,6 +253,10 @@ func TestPutInvalidParam(t *testing.T) {
 			fmt.Sprintf("tags//digest/%s", digest),
 			http.StatusBadRequest,
 		}, {
+			"invalid tag format",
+			fmt.Sprintf("tags/%s/digest/%s", url.PathEscape("invalidtag"), digest),
+			http.StatusBadRequest,
+		}, {
 			"invalid digest",
 			fmt.Sprintf("tags/%s/digest/foo", url.PathEscape(tag)),
 			http.StatusBadRequest,
@@ -311,6 +315,10 @@ func TestDuplicatePutInvalidParam(t *testing.T) {
 		{
 			"empty tag",
 			fmt.Sprintf("internal/duplicate/tags//digest/%s", digest),
+			http.StatusBadRequest,
+		}, {
+			"invalid tag format",
+			fmt.Sprintf("internal/duplicate/tags/%s/digest/%s", url.PathEscape("invalidtag"), digest),
 			http.StatusBadRequest,
 		}, {
 			"invalid digest",
@@ -375,6 +383,22 @@ func TestGetTagNotFound(t *testing.T) {
 	require.Equal(tagclient.ErrTagNotFound, err)
 }
 
+func TestGetInvalidTag(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := newClusterClient(addr)
+
+	_, err := client.Get("invalidtag")
+	require.Error(err)
+	require.True(httputil.IsBadRequest(err))
+}
+
 func TestHas(t *testing.T) {
 	require := require.New(t)
 
@@ -414,6 +438,22 @@ func TestHasNotFound(t *testing.T) {
 	ok, err := client.Has(tag)
 	require.NoError(err)
 	require.False(ok)
+}
+
+func TestHasInvalidTag(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := newClusterClient(addr)
+
+	_, err := client.Has("invalidtag")
+	require.Error(err)
+	require.True(httputil.IsBadRequest(err))
 }
 
 func TestListRepository(t *testing.T) {
@@ -457,6 +497,22 @@ func TestListRepository(t *testing.T) {
 	result, err := client.ListRepository(repo)
 	require.NoError(err)
 	require.Equal(tags, result)
+}
+
+func TestListRepositoryInvalidRepo(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := newClusterClient(addr)
+
+	_, err := client.ListRepository("Invalid_Repo")
+	require.Error(err)
+	require.True(httputil.IsBadRequest(err))
 }
 
 func TestList(t *testing.T) {
@@ -605,6 +661,22 @@ func TestReplicateNotFound(t *testing.T) {
 	require.True(httputil.IsNotFound(err))
 }
 
+func TestReplicateInvalidTag(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	addr, stop := testutil.StartServer(mocks.handler())
+	defer stop()
+
+	client := newClusterClient(addr)
+
+	err := client.Replicate("invalidtag")
+	require.Error(err)
+	require.True(httputil.IsBadRequest(err))
+}
+
 func TestDuplicateReplicate(t *testing.T) {
 	require := require.New(t)
 
@@ -639,6 +711,10 @@ func TestDuplicateReplicateInvalidParam(t *testing.T) {
 		{
 			"empty tag",
 			fmt.Sprintf("internal/duplicate/remotes/tags//digest/%s", digest),
+			http.StatusBadRequest,
+		}, {
+			"invalid tag format",
+			fmt.Sprintf("internal/duplicate/remotes/tags/%s/digest/%s", url.PathEscape("invalidtag"), digest),
 			http.StatusBadRequest,
 		}, {
 			"invalid digest",
