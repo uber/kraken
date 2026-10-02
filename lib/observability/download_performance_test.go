@@ -35,7 +35,7 @@ func TestGetSizeTag(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tt.expected, getSizeTag(tt.size))
+			require.Equal(t, tt.expected, GetSizeTag(tt.size))
 		})
 	}
 }
