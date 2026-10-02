@@ -23,8 +23,9 @@ import (
 // GCS defines the operations we use in the GCS api. Useful for mocking.
 type GCS interface {
 	ObjectAttrs(objectName string) (*storage.ObjectAttrs, error)
-	Download(objectName string, w io.Writer) (int64, error)
+	Download(objectName string, w io.WriterAt) (int64, error)
 	Upload(objectName string, r io.Reader) (int64, error)
 	GetObjectIterator(prefix string) iterator.Pageable
 	NextPage(pager *iterator.Pager) ([]string, string, error)
+	Close() error
 }

@@ -36,8 +36,22 @@ func (m *MockGCS) EXPECT() *MockGCSMockRecorder {
 	return m.recorder
 }
 
+// Close mocks base method.
+func (m *MockGCS) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockGCSMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockGCS)(nil).Close))
+}
+
 // Download mocks base method.
-func (m *MockGCS) Download(arg0 string, arg1 io.Writer) (int64, error) {
+func (m *MockGCS) Download(arg0 string, arg1 io.WriterAt) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Download", arg0, arg1)
 	ret0, _ := ret[0].(int64)
