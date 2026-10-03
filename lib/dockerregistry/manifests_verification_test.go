@@ -25,7 +25,13 @@ import (
 
 // buildDriverWithVerification sets up a storage driver, backing transferer state,
 // and returns a manifest tag path that will trigger manifest download + verify.
-func buildDriverWithVerification(t *testing.T, decision SignatureVerificationDecision, retErr error, called *bool) (*KrakenStorageDriver, string, string) {
+func buildDriverWithVerification(
+	t *testing.T,
+	decision SignatureVerificationDecision,
+	retErr error,
+	called *bool,
+	enforceVerification bool,
+) (*KrakenStorageDriver, string, string) {
 	t.Helper()
 
 	// Create CA store + transferer
@@ -58,52 +64,80 @@ func buildDriverWithVerification(t *testing.T, decision SignatureVerificationDec
 		require.Equal(t, manifestDigest, vDigest)
 		return decision, retErr
 	}
-	sd := NewReadWriteStorageDriver(Config{}, td.cas, td.transferer, verif)
+	cfg := Config{EnforceSignatureVerification: enforceVerification}
+	sd := NewReadWriteStorageDriver(cfg, td.cas, td.transferer, verif)
 
-	// Path that triggers manifests.getDigest → verify
+	// Path that triggers manifests.getDigest → verifySignature
 	path := genManifestTagCurrentLinkPath(repo, tag, manifestDigest.Hex())
 	return sd, path, ""
 }
 
-func TestVerification_Allow(t *testing.T) {
-	var called bool
-	sd, path, _ := buildDriverWithVerification(t, DecisionAllow, nil, &called)
+func TestVerification(t *testing.T) {
+	tests := map[string]struct {
+		decision            SignatureVerificationDecision
+		retErr              error
+		enforceVerification bool
+		wantErr             string
+	}{
+		"allow without enforcement": {
+			decision:            DecisionAllow,
+			enforceVerification: false,
+		},
+		"skip without enforcement": {
+			decision:            DecisionSkip,
+			enforceVerification: false,
+		},
+		"deny without enforcement": {
+			decision:            DecisionDeny,
+			enforceVerification: false,
+		},
+		"error without enforcement": {
+			retErr:              fmt.Errorf("test err"),
+			enforceVerification: false,
+		},
+		"unknown without enforcement": {
+			decision:            100,
+			enforceVerification: false,
+		},
+		"allow with enforcement": {
+			decision:            DecisionAllow,
+			enforceVerification: true,
+		},
+		"skip with enforcement": {
+			decision:            DecisionSkip,
+			enforceVerification: true,
+		},
+		"deny with enforcement": {
+			decision:            DecisionDeny,
+			enforceVerification: true,
+			wantErr:             "verify signature: denied sha256:",
+		},
+		"error with enforcement": {
+			retErr:              fmt.Errorf("test err"),
+			enforceVerification: true,
+			wantErr:             "verify signature: test err",
+		},
+		"unknown with enforcement": {
+			decision:            100,
+			enforceVerification: true,
+			wantErr:             "verify signature: unknown verification decision: 100",
+		},
+	}
 
-	data, err := sd.GetContent(contextFixture(), path)
-	require.NoError(t, err)
-	// Should still return a digest link (sha256:<hex>)
-	require.Greater(t, len(data), 0)
-	require.True(t, called, "verification should be called")
-}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var called bool
+			sd, path, _ := buildDriverWithVerification(t, tt.decision, tt.retErr, &called, tt.enforceVerification)
 
-func TestVerification_Deny(t *testing.T) {
-	var called bool
-	sd, path, _ := buildDriverWithVerification(t, DecisionDeny, nil, &called)
+			data, err := sd.GetContent(contextFixture(), path)
+			require.True(t, called)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
 
-	data, err := sd.GetContent(contextFixture(), path)
-	require.NoError(t, err)
-	// Deny does not block returning the manifest link today (verify is advisory)
-	require.Greater(t, len(data), 0)
-	require.True(t, called, "verification should be called")
-}
-
-func TestVerification_Skip(t *testing.T) {
-	var called bool
-	sd, path, _ := buildDriverWithVerification(t, DecisionSkip, nil, &called)
-
-	data, err := sd.GetContent(contextFixture(), path)
-	require.NoError(t, err)
-	require.Greater(t, len(data), 0)
-	require.True(t, called, "verification should be called")
-}
-
-func TestVerification_Error(t *testing.T) {
-	var called bool
-	sd, path, _ := buildDriverWithVerification(t, DecisionAllow /*unused*/, fmt.Errorf("boom"), &called)
-
-	data, err := sd.GetContent(contextFixture(), path)
-	// Even on error, current behavior is to ignore verify error and proceed
-	require.NoError(t, err)
-	require.Greater(t, len(data), 0)
-	require.True(t, called, "verification should be called")
+			require.NoError(t, err)
+			require.Greater(t, len(data), 0)
+		})
+	}
 }
