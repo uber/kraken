@@ -15,6 +15,7 @@ package store
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -225,7 +226,7 @@ func TestCAStoreCreateUploadFileAndMoveToCache(t *testing.T) {
 	err = s.MoveUploadFileToCache(src, dst)
 	require.NoError(err)
 	_, err = os.Stat(path.Join(config.UploadDir, src[:2], src[2:4], src))
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	_, err = os.Stat(path.Join(config.CacheDir, dst[:2], dst[2:4], dst))
 	require.NoError(err)
 }
@@ -258,9 +259,9 @@ func TestCAStoreCreateUploadFileAndMoveToCacheFailure(t *testing.T) {
 	err = s.MoveUploadFileToCache(src, dst)
 	require.EqualError(err, fmt.Sprintf("verify digest: computed digest sha256:%s doesn't match expected value sha256:%s", digest.Hex(), dst))
 	_, err = os.Stat(path.Join(config.UploadDir, src[:2], src[2:4], src))
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	_, err = os.Stat(path.Join(config.CacheDir, dst[:2], dst[2:4], dst))
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func TestCAStoreCreateCacheFile(t *testing.T) {

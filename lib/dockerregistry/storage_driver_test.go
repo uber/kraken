@@ -31,15 +31,14 @@ import (
 )
 
 func TestStorageDriverGetContent(t *testing.T) {
-	td, cleanup := newTestDriver()
-	defer cleanup()
+	td := newTestDriver(t)
 
 	sd, testImage := td.setup()
 
 	var sa startedAtMetadata
-	if err := td.cas.GetUploadFileMetadata(testImage.upload, &sa); err != nil {
-		log.Panic(err)
-	}
+	ok, err := td.store.GetMetadata(testImage.upload, &sa)
+	require.NoError(t, err)
+	require.True(t, ok)
 	uploadTime, err := sa.Serialize()
 	if err != nil {
 		log.Panic(err)
@@ -75,8 +74,7 @@ func TestStorageDriverGetContent(t *testing.T) {
 }
 
 func TestStorageDriverReader(t *testing.T) {
-	td, cleanup := newTestDriver()
-	defer cleanup()
+	td := newTestDriver(t)
 
 	sd, testImage := td.setup()
 	newBlobPath := genBlobDataPath(core.DigestFixture().Hex())
@@ -107,8 +105,7 @@ func TestStorageDriverReader(t *testing.T) {
 }
 
 func TestStorageDriverPutContent(t *testing.T) {
-	td, cleanup := newTestDriver()
-	defer cleanup()
+	td := newTestDriver(t)
 
 	sd, testImage := td.setup()
 
@@ -142,8 +139,7 @@ func TestStorageDriverPutContent(t *testing.T) {
 }
 
 func TestStorageDriverWriter(t *testing.T) {
-	td, cleanup := newTestDriver()
-	defer cleanup()
+	td := newTestDriver(t)
 
 	sd, testImage := td.setup()
 	newUploadPath := genUploadDataPath(uuid.Generate().String())
@@ -180,8 +176,7 @@ func TestStorageDriverWriter(t *testing.T) {
 }
 
 func TestStorageDriverStat(t *testing.T) {
-	td, cleanup := newTestDriver()
-	defer cleanup()
+	td := newTestDriver(t)
 
 	sd, testImage := td.setup()
 	newManifestPath := genManifestTagCurrentLinkPath(
@@ -213,8 +208,7 @@ func TestStorageDriverStat(t *testing.T) {
 }
 
 func TestStorageDriverList(t *testing.T) {
-	td, cleanup := newTestDriver()
-	defer cleanup()
+	td := newTestDriver(t)
 
 	sd, testImage := td.setup()
 
@@ -240,8 +234,7 @@ func TestStorageDriverList(t *testing.T) {
 func TestStorageDriverMove(t *testing.T) {
 	require := require.New(t)
 
-	td, cleanup := newTestDriver()
-	defer cleanup()
+	td := newTestDriver(t)
 
 	sd, testImage := td.setup()
 
@@ -250,7 +243,7 @@ func TestStorageDriverMove(t *testing.T) {
 
 	require.NoError(sd.Move(context.TODO(), genUploadDataPath(testImage.upload), genBlobDataPath(d.Hex())))
 
-	reader, err := td.cas.GetCacheFileReader(d.Hex())
+	reader, err := td.store.ScopeComplete().Open(d.Hex())
 	require.NoError(err)
 	data, err := io.ReadAll(reader)
 	require.NoError(err)

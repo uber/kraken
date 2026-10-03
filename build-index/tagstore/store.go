@@ -27,8 +27,7 @@ import (
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/lib/persistedretry"
 	"github.com/uber/kraken/lib/persistedretry/writeback"
-	"github.com/uber/kraken/lib/store"
-	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/log"
 )
@@ -38,12 +37,9 @@ var (
 	ErrTagNotFound = errors.New("tag not found")
 )
 
-// FileStore defines operations required for storing tags on disk.
-type FileStore interface {
-	CreateCacheFile(name string, r io.Reader) error
-	SetCacheFileMetadata(name string, md metadata.Metadata) (bool, error)
-	GetCacheFileReader(name string) (store.FileReader, error)
-}
+// We use an unweighted LRU eviction to store tags.
+// See [disk.Config.Capacity]for for details.
+const _tagSize = 1
 
 // Store defines tag storage operations.
 type Store interface {
@@ -56,7 +52,7 @@ type Store interface {
 // 2. Remote storage: durable tag storage.
 type tagStore struct {
 	config           Config
-	fs               FileStore
+	diskStore        *disk.Store
 	backends         *backend.Manager
 	writeBackManager persistedretry.Manager
 
@@ -68,13 +64,13 @@ type tagStore struct {
 // New creates a new Store.
 func New(
 	config Config,
-	fs FileStore,
+	diskStore *disk.Store,
 	backends *backend.Manager,
 	writeBackManager persistedretry.Manager,
 ) Store {
 	s := &tagStore{
 		config:           config,
-		fs:               fs,
+		diskStore:        diskStore,
 		backends:         backends,
 		writeBackManager: writeBackManager,
 	}
@@ -96,9 +92,9 @@ func (s *tagStore) Put(ctx context.Context, tag string, d core.Digest, writeBack
 		log.WithTraceContext(ctx).With("tag", tag, "error", err).Error("Failed to write tag to disk")
 		return fmt.Errorf("write tag to disk: %s", err)
 	}
-	if _, err := s.fs.SetCacheFileMetadata(tag, metadata.NewPersist(true)); err != nil {
-		log.WithTraceContext(ctx).With("tag", tag, "error", err).Error("Failed to set persist metadata")
-		return fmt.Errorf("set persist metadata: %s", err)
+	if err := s.diskStore.BanEviction(tag); err != nil {
+		log.WithTraceContext(ctx).With("tag", tag, "error", err).Error("Failed to ban eviction")
+		return fmt.Errorf("ban eviction: %s", err)
 	}
 	task := writeback.NewTaskWithContext(ctx, tag, tag, writeBackDelay)
 	log.WithTraceContext(ctx).With("tag", tag, "has_trace", task.HasTraceContext()).Debug("Created writeback task with trace context")
@@ -137,8 +133,20 @@ func (s *tagStore) asyncWriteBackStrategy(task persistedretry.Task) error {
 }
 
 func (s *tagStore) writeTagToDisk(tag string, d core.Digest) error {
-	buf := bytes.NewBufferString(d.String())
-	if err := s.fs.CreateCacheFile(tag, buf); err != nil && !os.IsExist(err) {
+	f, err := s.diskStore.Create(tag, _tagSize)
+	if os.IsExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer closers.Close(f)
+	if _, err := f.Write([]byte(d.String())); err != nil {
+		disk.Abort(s.diskStore, tag)
+		return err
+	}
+	if err := s.diskStore.MarkComplete(tag); err != nil {
+		disk.Abort(s.diskStore, tag)
 		return err
 	}
 	return nil
@@ -147,9 +155,9 @@ func (s *tagStore) writeTagToDisk(tag string, d core.Digest) error {
 func (s *tagStore) resolveFromDisk(tag string) (core.Digest, error) {
 	log.With("tag", tag).Debug("Attempting to resolve tag from disk cache")
 
-	f, err := s.fs.GetCacheFileReader(tag)
+	f, err := s.diskStore.Open(tag)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			log.With("tag", tag).Debug("Tag not found in disk cache")
 			return core.Digest{}, ErrTagNotFound
 		}

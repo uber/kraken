@@ -14,6 +14,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -224,7 +225,7 @@ func (m *cleanupManager) customPolicyBasedCleanup(op base.FileOp, config Cleanup
 
 		var accessTime metadata.LastAccessTime
 		err = op.GetFileMetadata(name, &accessTime)
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
@@ -314,7 +315,7 @@ func (m *cleanupManager) readyForDeletion(
 	}
 
 	var lat metadata.LastAccessTime
-	if err := op.GetFileMetadata(name, &lat); os.IsNotExist(err) {
+	if err := op.GetFileMetadata(name, &lat); errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	} else if err != nil {
 		return false, fmt.Errorf("get file lat: %s", err)

@@ -14,6 +14,7 @@
 package base
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -136,7 +137,7 @@ func (op *localFileOp) reloadFileEntryHelper(name string) (reloaded bool, err er
 			err = entry.Reload()
 			return err == nil
 		}); err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
 			return false, err
@@ -214,7 +215,7 @@ func (op *localFileOp) createFileHelper(
 	loaded := op.s.fileMap.LoadForRead(name, func(name string, entry FileEntry) {
 		err = op.verifyStateHelper(name, entry)
 	})
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		// Includes FileStateError.
 		return err
 	} else if loaded {
@@ -223,7 +224,7 @@ func (op *localFileOp) createFileHelper(
 
 	// Check if file is on disk.
 	loaded, err = op.reloadFileEntryHelper(name)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		// Includes FileStateError.
 		return err
 	} else if loaded {

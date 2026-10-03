@@ -21,7 +21,8 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	storelib "github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/utils/memsize"
 )
@@ -31,7 +32,7 @@ var _ ImageTransferer = (*ReadOnlyTransferer)(nil)
 // ReadOnlyTransferer gets and posts manifest to tracker, and transfers blobs as torrent.
 type ReadOnlyTransferer struct {
 	stats tally.Scope
-	cads  *store.CADownloadStore
+	store *disk.Store
 	tags  tagclient.Client
 	sched scheduler.Scheduler
 }
@@ -39,7 +40,7 @@ type ReadOnlyTransferer struct {
 // NewReadOnlyTransferer creates a new ReadOnlyTransferer.
 func NewReadOnlyTransferer(
 	stats tally.Scope,
-	cads *store.CADownloadStore,
+	store *disk.Store,
 	tags tagclient.Client,
 	sched scheduler.Scheduler) *ReadOnlyTransferer {
 
@@ -47,18 +48,18 @@ func NewReadOnlyTransferer(
 		"module": "rotransferer",
 	})
 
-	return &ReadOnlyTransferer{stats, cads, tags, sched}
+	return &ReadOnlyTransferer{stats, store, tags, sched}
 }
 
 // Stat returns blob info from local cache, and triggers download if the blob is
 // not available locally.
 func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobInfo, error) {
-	fi, err := t.cads.Cache().GetFileStat(d.Hex())
-	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
+	fi, err := t.store.ScopeComplete().Stat(d.Hex())
+	if errors.Is(err, storelib.ErrOutOfScope) || errors.Is(err, os.ErrNotExist) {
 		if err := t.sched.Download(namespace, d); err != nil {
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
-		fi, err = t.cads.Cache().GetFileStat(d.Hex())
+		fi, err = t.store.ScopeComplete().Stat(d.Hex())
 		if err != nil {
 			return nil, fmt.Errorf("stat cache: %s", err)
 		}
@@ -69,13 +70,13 @@ func (t *ReadOnlyTransferer) Stat(namespace string, d core.Digest) (*core.BlobIn
 }
 
 // Download downloads blobs as torrent.
-func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.FileReader, error) {
-	f, err := t.cads.Cache().GetFileReader(d.Hex())
-	if os.IsNotExist(err) || t.cads.InDownloadError(err) {
+func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (storelib.FileReader, error) {
+	f, err := t.store.ScopeComplete().Open(d.Hex())
+	if errors.Is(err, storelib.ErrOutOfScope) || errors.Is(err, os.ErrNotExist) {
 		if err := t.sched.Download(namespace, d); err != nil {
 			return nil, fmt.Errorf("scheduler: %s", err)
 		}
-		f, err = t.cads.Cache().GetFileReader(d.Hex())
+		f, err = t.store.ScopeComplete().Open(d.Hex())
 		if err != nil {
 			return nil, fmt.Errorf("cache: %s", err)
 		}
@@ -88,7 +89,7 @@ func (t *ReadOnlyTransferer) Download(namespace string, d core.Digest) (store.Fi
 }
 
 // Upload uploads blobs to a torrent network.
-func (t *ReadOnlyTransferer) Upload(namespace string, d core.Digest, blob store.FileReader) error {
+func (t *ReadOnlyTransferer) Upload(namespace string, d core.Digest, blob storelib.FileReader) error {
 	return errors.New("unsupported operation")
 }
 

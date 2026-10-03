@@ -23,37 +23,32 @@ import (
 	"time"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
-	mockstore "github.com/uber/kraken/mocks/lib/store"
 	"github.com/uber/kraken/utils/bitsetutil"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
 
-func prepareStore(cads *store.CADownloadStore, mi *core.MetaInfo) {
-	if err := cads.CreateDownloadFile(mi.Digest().Hex(), mi.Length()); err != nil {
-		panic(err)
-	}
-	if _, err := cads.Download().SetMetadata(mi.Digest().Hex(), metadata.NewTorrentMeta(mi)); err != nil {
-		panic(err)
-	}
+func prepareStore(t *testing.T, store *disk.Store, mi *core.MetaInfo) {
+	f, err := store.Create(mi.Digest().Hex(), uint64(mi.Length()))
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	require.NoError(t, store.ScopeIncomplete().SetMetadata(mi.Digest().Hex(), metadata.NewTorrentMeta(mi)))
 }
 
 func TestTorrentCreate(t *testing.T) {
 	require := require.New(t)
 
-	cads, cleanup := store.CADownloadStoreFixture()
-	defer cleanup()
+	store := disk.Fixture(t)
 
 	mi := core.SizedBlobFixture(7, 2).MetaInfo
 
-	prepareStore(cads, mi)
+	prepareStore(t, store, mi)
 
-	tor, err := NewTorrent(cads, mi)
+	tor, err := NewTorrent(store, mi)
 	require.NoError(err)
 
 	// New torrent
@@ -73,14 +68,13 @@ func TestTorrentCreate(t *testing.T) {
 func TestTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
 	require := require.New(t)
 
-	cads, cleanup := store.CADownloadStoreFixture()
-	defer cleanup()
+	store := disk.Fixture(t)
 
 	blob := core.SizedBlobFixture(2, 1)
 
-	prepareStore(cads, blob.MetaInfo)
+	prepareStore(t, store, blob.MetaInfo)
 
-	tor, err := NewTorrent(cads, blob.MetaInfo)
+	tor, err := NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
 
 	require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content[:1]), 0))
@@ -92,14 +86,13 @@ func TestTorrentWriteUpdatesBytesDownloadedAndBitfield(t *testing.T) {
 func TestTorrentWriteComplete(t *testing.T) {
 	require := require.New(t)
 
-	cads, cleanup := store.CADownloadStoreFixture()
-	defer cleanup()
+	store := disk.Fixture(t)
 
 	blob := core.SizedBlobFixture(1, 1)
 
-	prepareStore(cads, blob.MetaInfo)
+	prepareStore(t, store, blob.MetaInfo)
 
-	tor, err := NewTorrent(cads, blob.MetaInfo)
+	tor, err := NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
 
 	require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
@@ -123,14 +116,13 @@ func TestTorrentWriteComplete(t *testing.T) {
 func TestTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	require := require.New(t)
 
-	cads, cleanup := store.CADownloadStoreFixture()
-	defer cleanup()
+	store := disk.Fixture(t)
 
 	blob := core.SizedBlobFixture(7, 2)
 
-	prepareStore(cads, blob.MetaInfo)
+	prepareStore(t, store, blob.MetaInfo)
 
-	tor, err := NewTorrent(cads, blob.MetaInfo)
+	tor, err := NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
 
 	wg := sync.WaitGroup{}
@@ -152,7 +144,7 @@ func TestTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 	require.Nil(tor.MissingPieces())
 
 	// Check content
-	reader, err := cads.Cache().GetFileReader(blob.MetaInfo.Digest().Hex())
+	reader, err := store.ScopeComplete().Open(blob.MetaInfo.Digest().Hex())
 	require.NoError(err)
 	torrentBytes, err := io.ReadAll(reader)
 	require.NoError(err)
@@ -162,14 +154,13 @@ func TestTorrentWriteMultiplePieceConcurrent(t *testing.T) {
 func TestTorrentWriteSamePieceConcurrent(t *testing.T) {
 	require := require.New(t)
 
-	cads, cleanup := store.CADownloadStoreFixture()
-	defer cleanup()
+	store := disk.Fixture(t)
 
 	blob := core.SizedBlobFixture(16, 1)
 
-	prepareStore(cads, blob.MetaInfo)
+	prepareStore(t, store, blob.MetaInfo)
 
-	tor, err := NewTorrent(cads, blob.MetaInfo)
+	tor, err := NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
 
 	var wg sync.WaitGroup
@@ -218,73 +209,59 @@ func TestTorrentWriteSamePieceConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 
-	reader, err := cads.Cache().GetFileReader(blob.MetaInfo.Digest().Hex())
+	reader, err := store.ScopeComplete().Open(blob.MetaInfo.Digest().Hex())
 	require.NoError(err)
 	torrentBytes, err := io.ReadAll(reader)
 	require.NoError(err)
 	require.Equal(blob.Content, torrentBytes)
 }
 
-// mockGetDownloadFileReadWriterStore wraps an internal CADownloadStore but
-// overrides the GetDownloadFileReadWriter method to return f.
-type mockGetDownloadFileReadWriterStore struct {
-	*store.CADownloadStore
-	f store.FileReadWriter
+// coordinatedReader blocks the first Read call to simulate a slow piece
+// write, so a concurrent WritePiece can be attempted while the first is
+// still in progress.
+type coordinatedReader struct {
+	storage.PieceReader
+	once         sync.Once
+	startReading chan bool
+	stopReading  chan bool
 }
 
-func (s *mockGetDownloadFileReadWriterStore) GetDownloadFileReadWriter(
-	name string) (store.FileReadWriter, error) {
-
-	return s.f, nil
+func newCoordinatedReader(r storage.PieceReader) *coordinatedReader {
+	return &coordinatedReader{PieceReader: r, startReading: make(chan bool), stopReading: make(chan bool)}
 }
 
-// coordinatedWriter allows blocking WriteAt calls to simulate race conditions.
-type coordinatedWriter struct {
-	store.FileReadWriter
-	startWriting chan bool
-	stopWriting  chan bool
-}
-
-func newCoordinatedWriter(f store.FileReadWriter) *coordinatedWriter {
-	return &coordinatedWriter{f, make(chan bool), make(chan bool)}
-}
-
-func (w *coordinatedWriter) Write(b []byte) (int, error) {
-	w.startWriting <- true
-	<-w.stopWriting
-	return len(b), nil
+func (r *coordinatedReader) Read(p []byte) (int, error) {
+	r.once.Do(func() {
+		r.startReading <- true
+		<-r.stopReading
+	})
+	return r.PieceReader.Read(p)
 }
 
 func TestTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 	require := require.New(t)
 
+	store := disk.Fixture(t)
+
 	blob := core.SizedBlobFixture(1, 1)
 
-	f, cleanup := store.NewMockFileReadWriter([]byte{})
-	defer cleanup()
+	prepareStore(t, store, blob.MetaInfo)
 
-	w := newCoordinatedWriter(f)
-
-	cads, cleanup := store.CADownloadStoreFixture()
-	defer cleanup()
-
-	prepareStore(cads, blob.MetaInfo)
-
-	mockCADS := &mockGetDownloadFileReadWriterStore{cads, w}
-
-	tor, err := NewTorrent(mockCADS, blob.MetaInfo)
+	tor, err := NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
+
+	r := newCoordinatedReader(piecereader.NewBuffer(blob.Content))
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
+		require.NoError(tor.WritePiece(r, 0))
 	}()
 
 	// Writing while another goroutine is mid-write should not block.
-	<-w.startWriting
+	<-r.startReading
 	require.Equal(errWritePieceConflict, tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
-	w.stopWriting <- true
+	r.stopReading <- true
 
 	<-done
 
@@ -292,55 +269,55 @@ func TestTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 	require.Equal(storage.ErrPieceComplete, tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
 }
 
+// failOnceReader fails the first Read with err, then behaves like the
+// underlying PieceReader.
+type failOnceReader struct {
+	storage.PieceReader
+	err    error
+	failed bool
+}
+
+func (r *failOnceReader) Read(p []byte) (int, error) {
+	if !r.failed {
+		r.failed = true
+		return 0, r.err
+	}
+	return r.PieceReader.Read(p)
+}
+
 func TestTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 	require := require.New(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	w := mockstore.NewMockFileReadWriter(ctrl)
-
-	cads, cleanup := store.CADownloadStoreFixture()
-	defer cleanup()
+	store := disk.Fixture(t)
 
 	blob := core.SizedBlobFixture(1, 1)
 
-	prepareStore(cads, blob.MetaInfo)
+	prepareStore(t, store, blob.MetaInfo)
 
-	mockCADS := &mockGetDownloadFileReadWriterStore{cads, w}
-
-	gomock.InOrder(
-		// First write fails.
-		w.EXPECT().Seek(int64(0), 0).Return(int64(0), nil),
-		w.EXPECT().Write(blob.Content).Return(0, errors.New("first write error")),
-		w.EXPECT().Close().Return(nil),
-
-		// Second write succeeds.
-		w.EXPECT().Seek(int64(0), 0).Return(int64(0), nil),
-		w.EXPECT().Write(blob.Content).Return(len(blob.Content), nil),
-		w.EXPECT().Close().Return(nil),
-	)
-
-	tor, err := NewTorrent(mockCADS, blob.MetaInfo)
+	tor, err := NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
+
+	failReader := &failOnceReader{
+		PieceReader: piecereader.NewBuffer(blob.Content),
+		err:         errors.New("first write error"),
+	}
 
 	// After the first write fails, the dirty bit should be flipped to empty,
 	// allowing future writes to succeed.
-	require.Error(tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
+	require.Error(tor.WritePiece(failReader, 0))
 	require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
 }
 
 func TestTorrentRestoreCompletedTorrent(t *testing.T) {
 	require := require.New(t)
 
-	cads, cleanup := store.CADownloadStoreFixture()
-	defer cleanup()
+	store := disk.Fixture(t)
 
 	blob := core.SizedBlobFixture(8, 1)
 
-	prepareStore(cads, blob.MetaInfo)
+	prepareStore(t, store, blob.MetaInfo)
 
-	tor, err := NewTorrent(cads, blob.MetaInfo)
+	tor, err := NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
 
 	for i, b := range blob.Content {
@@ -349,7 +326,7 @@ func TestTorrentRestoreCompletedTorrent(t *testing.T) {
 
 	require.True(tor.Complete())
 
-	tor, err = NewTorrent(cads, blob.MetaInfo)
+	tor, err = NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
 
 	require.True(tor.Complete())
@@ -358,14 +335,13 @@ func TestTorrentRestoreCompletedTorrent(t *testing.T) {
 func TestTorrentRestoreInProgressTorrent(t *testing.T) {
 	require := require.New(t)
 
-	cads, cleanup := store.CADownloadStoreFixture()
-	defer cleanup()
+	store := disk.Fixture(t)
 
 	blob := core.SizedBlobFixture(8, 1)
 
-	prepareStore(cads, blob.MetaInfo)
+	prepareStore(t, store, blob.MetaInfo)
 
-	tor, err := NewTorrent(cads, blob.MetaInfo)
+	tor, err := NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
 
 	pi := 4
@@ -373,7 +349,7 @@ func TestTorrentRestoreInProgressTorrent(t *testing.T) {
 	require.NoError(tor.WritePiece(piecereader.NewBuffer([]byte{blob.Content[pi]}), pi))
 	require.Equal(int64(1), tor.BytesDownloaded())
 
-	tor, err = NewTorrent(cads, blob.MetaInfo)
+	tor, err = NewTorrent(store, blob.MetaInfo)
 	require.NoError(err)
 
 	require.Equal(int64(1), tor.BytesDownloaded())

@@ -14,6 +14,7 @@
 package base
 
 import (
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -193,7 +194,7 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	_, err = os.Stat(filepath.Join(s2.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.NoError(err)
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	_, err = store.NewFileOp().AcceptState(s2).GetFileReader(fn, partSize)
 	require.NoError(err)
 
@@ -229,7 +230,7 @@ func testMoveFile(require *require.Assertions, storeBundle *fileStoreTestBundle)
 	// Close on last opened readwriter removes hardlink
 	require.NoError(readWriterState2.Close())
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 	require.NoError(readWriterState1.Close())
 	_, err = os.Stat(filepath.Join(s2.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
 	require.NoError(err)
@@ -284,7 +285,7 @@ func testDeleteFile(require *require.Assertions, storeBundle *fileStoreTestBundl
 	err = store.NewFileOp().AcceptState(s1).DeleteFile(fn)
 	require.NoError(err)
 	_, err = os.Stat(filepath.Join(s1.GetDirectory(), store.fileEntryFactory.GetRelativePath(fn)))
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 
 	// Existing readwriter should still work after deletion
 	_, err = rw.Seek(0, 0)
@@ -305,7 +306,7 @@ func testDeleteFile(require *require.Assertions, storeBundle *fileStoreTestBundl
 
 	// Get deleted file should fail
 	_, err = store.NewFileOp().AcceptState(s1).GetFileReader(fn, 100 /*readPartSize */)
-	require.True(os.IsNotExist(err))
+	require.True(errors.Is(err, os.ErrNotExist))
 }
 
 func testGetFileReader(require *require.Assertions, storeBundle *fileStoreTestBundle) {
