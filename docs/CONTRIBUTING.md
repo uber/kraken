@@ -16,6 +16,8 @@ Please follow standard fork-and-pull workflow.
 - Push the change back to your fork
 - Submit a Pull request. We will review and merge your change.
 
+If you are new to Kraken, have a look at our [good first issues](https://github.com/uber/kraken/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22) to get started.
+
 ## Setup
 
 Most tests and scripts assumes the developer to have Docker installed locally.
