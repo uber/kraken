@@ -29,7 +29,16 @@ const (
 
 // Config defines registry configuration.
 type Config struct {
+	// Docker is the Docker Distribution registry configuration.
 	Docker configuration.Configuration `yaml:"docker"`
+
+	// EnforceSignatureVerification rejects manifest downloads when signature
+	// verification returns deny or an error. Allow and skip still succeed.
+	//
+	// DefaultVerificationFunc always skips, so this has no effect unless a
+	// custom verification function is registered via
+	// RegisterKrakenStorageDriverWithImageVerification.
+	EnforceSignatureVerification bool `yaml:"enforce_signature_verification"`
 }
 
 // ReadWriteParameters builds parameters for a read-write driver.
