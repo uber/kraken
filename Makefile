@@ -114,7 +114,6 @@ publish: images
 	docker push $(REGISTRY)/kraken-proxy:$(PACKAGE_VERSION)
 	docker push $(REGISTRY)/kraken-testfs:$(PACKAGE_VERSION)
 	docker push $(REGISTRY)/kraken-tracker:$(PACKAGE_VERSION)
-	docker push $(REGISTRY)/kraken-herd:$(PACKAGE_VERSION)
 
 clean::
 	@rm -f $(LINUX_BINS)

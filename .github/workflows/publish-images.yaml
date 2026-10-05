@@ -7,11 +7,10 @@ on:
   workflow_dispatch: {}
 
 env:
-  REGISTRY: ghcr.io/uber
+  REGISTRY: uber
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   publish:
@@ -21,12 +20,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Log in to GHCR
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push images
         run: make publish REGISTRY=${{ env.REGISTRY }}
@@ -34,7 +32,38 @@ jobs:
       - name: Also tag and push latest
         run: |
           version=$(git describe --always --tags)
-          for component in agent build-index origin proxy testfs tracker herd; do
+          for component in agent build-index origin proxy testfs tracker; do
             docker tag "${REGISTRY}/kraken-${component}:${version}" "${REGISTRY}/kraken-${component}:latest"
             docker push "${REGISTRY}/kraken-${component}:latest"
           done
+
+  describe:
+    needs: publish
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - component: agent
+            description: "Kraken agent: runs on every host, serves the Docker registry API, and downloads blobs over P2P."
+          - component: build-index
+            description: "Kraken build-index: maps image tags to blob digests and replicates tags between clusters."
+          - component: origin
+            description: "Kraken origin: stores blobs on a pluggable storage backend and seeds them to agents over P2P."
+          - component: proxy
+            description: "Kraken proxy: receives image uploads, sends layers to origins, and sends tags to build-index."
+          - component: testfs
+            description: "Kraken testfs: simple HTTP file server for Kraken integration tests. Not for production use."
+          - component: tracker
+            description: "Kraken tracker: tells each peer which other peers to connect to for a blob."
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.REGISTRY }}/kraken-${{ matrix.component }}
+          short-description: ${{ matrix.description }}
+          readme-filepath: ./README.md
+          enable-url-completion: true
