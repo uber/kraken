@@ -1,5 +1,5 @@
 kraken:
-  repository: ghcr.io/uber
+  repository: uber
   tag: latest
   imagePullPolicy: IfNotPresent
   registry_port: 30081
