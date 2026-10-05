@@ -56,9 +56,10 @@ Done! kubectl is now configured to use "minikube" cluster and "default" namespac
 
 ## 3. Get the Kraken images
 
-Kraken publishes component images to `ghcr.io/uber`. The Helm chart's default values already
-point at this registry. You do not need to build or load any image yourself. If you want to
-test a local change to Kraken instead, see [Appendix: build images locally](#appendix-build-images-locally).
+Kraken publishes component images to Docker Hub in the `uber` namespace. The Helm chart's
+default values already point at this namespace. You do not need to build or load any image
+yourself. If you want to test a local change to Kraken instead, see
+[Appendix: build images locally](#appendix-build-images-locally).
 
 ## 4. Install Kraken with Helm
 
@@ -202,7 +203,7 @@ $ minikube delete -p kraken-e2e
 ## Appendix: build images locally
 
 Use this section only if you want to test a local change to Kraken, instead of the published
-`ghcr.io/uber` images from step 3.
+Docker Hub images from step 3.
 
 Run this from the root of the repository:
 
@@ -275,9 +276,9 @@ $ docker rmi local/kraken-agent:dev local/kraken-build-index:dev local/kraken-or
 
 The image name or tag is wrong, or the image is private.
 
-- If you used the default install command from step 4, check that `ghcr.io/uber` allows
-  anonymous pulls. Run `docker pull ghcr.io/uber/kraken-agent:latest` on your machine. If this
-  command fails, use [Appendix: build images locally](#appendix-build-images-locally) instead.
+- If you used the default install command from step 4, check that you can pull the image from
+  Docker Hub. Run `docker pull uber/kraken-agent:latest` on your machine. If this command
+  fails, use [Appendix: build images locally](#appendix-build-images-locally) instead.
 - If you built your own images, check that you loaded every image into your cluster. Run
   `kind load docker-image local/kraken-agent:dev` again for any missing image. Check that
   `--set kraken.imagePullPolicy=Never` is in your `helm install` command. Without this flag,
