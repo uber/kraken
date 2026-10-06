@@ -128,7 +128,7 @@ func (l *nonLocalList) Resolve() stringset.Set {
 func getLocalNames() (stringset.Set, error) {
 	result := make(stringset.Set)
 
-	// Add all local non-loopback ips.
+	// Add all local IPv4 addresses.
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, fmt.Errorf("interfaces: %s", err)
@@ -139,7 +139,14 @@ func getLocalNames() (stringset.Set, error) {
 			return nil, fmt.Errorf("addrs of %v: %s", i, err)
 		}
 		for _, addr := range addrs {
-			ip := net.ParseIP(addr.String()).To4()
+			var ip net.IP
+			switch a := addr.(type) {
+			case *net.IPNet:
+				ip = a.IP
+			case *net.IPAddr:
+				ip = a.IP
+			}
+			ip = ip.To4()
 			if ip == nil {
 				continue
 			}
