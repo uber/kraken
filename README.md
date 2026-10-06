@@ -68,7 +68,10 @@ talk](https://www.youtube.com/watch?v=waVtYYSXkXU) at KubeCon + CloudNativeCon.
 
 # Architecture
 
-![](assets/architecture.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
+  <img alt="Kraken architecture" src="assets/architecture.svg">
+</picture>
 
 - Agent
   - Deployed on every host
