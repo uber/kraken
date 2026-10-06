@@ -1,0 +1,4 @@
+extends: /etc/kraken/config/agent/base.yaml
+{{ include "tls" . }}
+{{ include "trackers" . }}
+{{ include "build-index" . }}

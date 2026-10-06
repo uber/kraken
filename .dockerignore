@@ -1,0 +1,8 @@
+docs
+env
+go-build
+tags
+vendor
+.git
+.tmp
+.tmptest

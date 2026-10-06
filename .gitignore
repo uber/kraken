@@ -1,0 +1,61 @@
+.cache
+.idea
+.tmp
+.vscode
+.claude/settings.local.json
+*.test
+*.go~
+vendor/
+
+# Fake source dir for jenkins and debian, which uses repo root as GOPATH
+^bin/
+pkg/
+
+# Binary executable
+tracker/tracker
+agent/agent
+origin/origin
+proxy/proxy
+build-index/build-index
+tools/bin/puller/puller
+tools/bin/reload/reload
+tools/bin/reload-config/reload-config
+tools/bin/visualization/visualization
+tools/bin/testfs/testfs
+tools/bin/pexchange/pexchange
+tools/bin/trackerload/trackerload
+
+# tmp migration files
+[0-9]*_-dir.go
+
+*.xml
+*.pyc
+venv
+
+# Golang coverage files
+*.out
+# Golang test files
+*.test
+# Visual coverage report
+coverage.html
+# codecov coverage file
+coverage.txt
+
+# test db data
+db/data
+
+# Test configuratino generated from templates.
+config/*/test*.yaml
+
+# For vim users.
+tags
+
+# For engdoc.
+.DS_Store
+docs/_build/
+env*
+*.pyc
+*.pickle
+
+# For integration tests.
+.tmptest/

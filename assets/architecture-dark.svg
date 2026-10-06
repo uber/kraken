@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 800" width="100%" height="100%">
+  <defs>
+    <style>
+      /* GitHub Dark Mode Styles */
+      .diagram-bg { fill: #0d1117; }
+      .diagram-line { stroke: #e6edf3; stroke-width: 1.5; fill: none; }
+      .diagram-dash { stroke: #e6edf3; stroke-width: 1.5; stroke-dasharray: 4 4; fill: none; }
+      .diagram-node { fill: #0d1117; stroke: #e6edf3; stroke-width: 1.5; }
+      .label-bg { fill: #0d1117; }
+      .diagram-text { fill: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 13px; text-anchor: middle; dominant-baseline: central; }
+      .diagram-text-bold { font-weight: 600; }
+      .arrow-head { fill: #e6edf3; stroke: #e6edf3; }
+    </style>
+
+    <!-- Arrow Markers -->
+    <marker id="arr-end" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" class="arrow-head" />
+    </marker>
+    <marker id="arr-start" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 10 1 L 0 5 L 10 9 z" class="arrow-head" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect class="diagram-bg" x="0" y="0" width="1000" height="800" />
+
+  <!-- P2P Subsystem Dashed Boundary Box -->
+  <rect class="diagram-dash" x="518" y="10" width="475" height="435" />
+
+  <!-- CONNECTIONS & ARROWS -->
+  <!-- docker push -> Proxy -->
+  <line class="diagram-line" x1="80" y1="595" x2="237" y2="595" marker-end="url(#arr-end)" />
+
+  <!-- Proxy -> Origin (Put Blobs) -->
+  <line class="diagram-line" x1="284" y1="550" x2="284" y2="392" marker-end="url(#arr-end)" />
+
+  <!-- Proxy -> Build Index (Put Tags) -->
+  <line class="diagram-line" x1="331" y1="595" x2="664" y2="595" marker-end="url(#arr-end)" />
+
+  <!-- Origin <-> Datastore (Left) -->
+  <line class="diagram-line" x1="238" y1="360" x2="102" y2="360" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+
+  <!-- Origin -> Tracker (Get seeders) -->
+  <line class="diagram-line" x1="284" y1="328" x2="284" y2="220" marker-end="url(#arr-end)" />
+
+  <!-- Tracker <-> P2P Box (Get Peers) -->
+  <line class="diagram-line" x1="331" y1="175" x2="518" y2="175" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+
+  <!-- Origin <-> P2P Box (Seed) -->
+  <line class="diagram-line" x1="332" y1="360" x2="518" y2="360" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+
+  <!-- Build Index -> P2P Box (Get Tags) -->
+  <line class="diagram-line" x1="711" y1="550" x2="711" y2="445" marker-end="url(#arr-end)" />
+
+  <!-- Bottom Datastore -> Build Index -->
+  <path class="diagram-line" d="M 560 720 L 711 720 L 711 640" marker-end="url(#arr-end)" />
+
+  <!-- P2P AGENT MESH CONNECTIONS -->
+  <!-- Horizontal agent connections -->
+  <line class="diagram-line" x1="700" y1="110" x2="787" y2="110" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+  <line class="diagram-line" x1="634" y1="255" x2="852" y2="255" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+  <line class="diagram-line" x1="700" y1="390" x2="787" y2="390" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+
+  <!-- Vertical straight lines between top/bottom agents -->
+  <line class="diagram-line" x1="674" y1="136" x2="674" y2="364" />
+  <line class="diagram-line" x1="813" y1="136" x2="813" y2="364" />
+
+  <!-- Corner bracket paths connecting side agents to top/bottom agents -->
+  <path class="diagram-line" d="M 608 229 L 608 110 L 648 110" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+  <path class="diagram-line" d="M 608 281 L 608 390 L 648 390" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+  <path class="diagram-line" d="M 878 229 L 878 110 L 839 110" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+  <path class="diagram-line" d="M 878 281 L 878 390 L 839 390" marker-start="url(#arr-start)" marker-end="url(#arr-end)" />
+
+  <!-- NODES & COMPONENTS -->
+
+  <!-- Tracker -->
+  <rect class="diagram-node" x="237" y="130" width="94" height="90" rx="8" />
+  <text class="diagram-text" x="284" y="175">Tracker</text>
+
+  <!-- Origin Overlapping Circles -->
+  <circle class="diagram-node" cx="300" cy="360" r="32" />
+  <circle class="diagram-node" cx="285" cy="360" r="32" />
+  <circle class="diagram-node" cx="270" cy="360" r="32" />
+  <text class="diagram-text" x="270" y="360">Origin</text>
+
+  <!-- Proxy -->
+  <rect class="diagram-node" x="237" y="550" width="94" height="90" rx="8" />
+  <text class="diagram-text" x="284" y="595">Proxy</text>
+
+  <!-- Build Index -->
+  <rect class="diagram-node" x="664" y="550" width="94" height="90" rx="8" />
+  <text class="diagram-text" x="711" y="595">Build Index</text>
+
+  <!-- Left Datastore Cylinder -->
+  <g transform="translate(2, 310)">
+    <path class="diagram-node" d="M 0 15 L 0 85 A 50 15 0 0 0 100 85 L 100 15 Z" />
+    <ellipse class="diagram-node" cx="50" cy="15" rx="50" ry="15" />
+    <text class="diagram-text" x="50" y="45">Datastore</text>
+    <text class="diagram-text" x="50" y="63">(GCS/S3/HDFS)</text>
+  </g>
+
+  <!-- Bottom Datastore Cylinder -->
+  <g transform="translate(460, 670)">
+    <path class="diagram-node" d="M 0 15 L 0 85 A 50 15 0 0 0 100 85 L 100 15 Z" />
+    <ellipse class="diagram-node" cx="50" cy="15" rx="50" ry="15" />
+    <text class="diagram-text" x="50" y="45">Datastore</text>
+    <text class="diagram-text" x="50" y="63">(GCS/S3/HDFS)</text>
+  </g>
+
+  <!-- 6 Agents in P2P Box -->
+  <circle class="diagram-node" cx="674" cy="110" r="26" />
+  <text class="diagram-text" x="674" y="110">Agent</text>
+
+  <circle class="diagram-node" cx="813" cy="110" r="26" />
+  <text class="diagram-text" x="813" y="110">Agent</text>
+
+  <circle class="diagram-node" cx="608" cy="255" r="26" />
+  <text class="diagram-text" x="608" y="255">Agent</text>
+
+  <circle class="diagram-node" cx="878" cy="255" r="26" />
+  <text class="diagram-text" x="878" y="255">Agent</text>
+
+  <circle class="diagram-node" cx="674" cy="390" r="26" />
+  <text class="diagram-text" x="674" y="390">Agent</text>
+
+  <circle class="diagram-node" cx="813" cy="390" r="26" />
+  <text class="diagram-text" x="813" y="390">Agent</text>
+
+  <!-- TEXT LABELS & MASKS -->
+  <rect class="label-bg" x="115" y="586" width="85" height="18" />
+  <text class="diagram-text" x="157" y="595">docker push</text>
+
+  <rect class="label-bg" x="246" y="267" width="76" height="18" />
+  <text class="diagram-text" x="284" y="276">Get seeders</text>
+
+  <rect class="label-bg" x="252" y="463" width="64" height="18" />
+  <text class="diagram-text" x="284" y="472">Put Blobs</text>
+
+  <rect class="label-bg" x="388" y="166" width="72" height="18" />
+  <text class="diagram-text diagram-text-bold" x="424" y="175">Get Peers</text>
+
+  <rect class="label-bg" x="404" y="351" width="40" height="18" />
+  <text class="diagram-text" x="424" y="360">Seed</text>
+
+  <rect class="label-bg" x="467" y="586" width="60" height="18" />
+  <text class="diagram-text" x="497" y="595">Put Tags</text>
+
+  <rect class="label-bg" x="681" y="488" width="60" height="18" />
+  <text class="diagram-text" x="711" y="497">Get Tags</text>
+
+  <rect class="label-bg" x="728" y="246" width="30" height="18" />
+  <text class="diagram-text" x="743" y="255">P2P</text>
+</svg>

@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kraken-origin
+spec:
+  replicas: {{ .Values.origin.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kraken
+      app.kubernetes.io/component: origin
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kraken
+        app.kubernetes.io/component: origin
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      {{ with .Values.origin.annotations -}}
+      annotations:
+{{ tpl . $ | indent 8 }}
+      {{- end }}
+    spec:
+      {{ with .Values.origin.initContainers -}}
+      initContainers:
+{{ toYaml . | indent 6 }}{{ end }}
+      containers:
+      - name: main
+        image: {{ .Values.kraken.repository }}/kraken-origin:{{ .Values.kraken.tag }}
+        imagePullPolicy: {{ .Values.kraken.imagePullPolicy }}
+        command:
+        - /bin/bash
+        - -c
+        - "sleep 30 && /usr/bin/kraken-origin --config={{ .Values.origin.config }} --blobserver-port=80 --peer-port=8080"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+{{ with .Values.origin.extraVolumeMounts }}{{ toYaml . | indent 8 }}{{ end }}
+      volumes:
+      - name: config
+        configMap:
+          name: kraken
+{{ with .Values.origin.extraVolumes }}{{ toYaml . | indent 6 }}{{ end }}
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: kraken-origin
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: kraken
+    app.kubernetes.io/component: origin
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80

@@ -1,0 +1,69 @@
+zap:
+  level: info
+  development: false
+  encoding: console
+  disableStacktrace: true
+  encoderConfig:
+    messageKey: message
+    nameKey: logger_name
+    levelKey: level
+    timeKey: ts
+    callerKey: caller
+    stacktraceKey: stack
+    levelEncoder: capital
+    timeEncoder: iso8601
+    durationEncoder: seconds
+    callerEncoder: short
+  outputPaths:
+    - stdout
+    - /var/log/kraken/kraken-agent/stdout.log
+  errorOutputPaths:
+    - stdout
+    - /var/log/kraken/kraken-agent/stdout.log
+
+metrics:
+  m3:
+    service: kraken-agent
+
+scheduler:
+  log:
+    timeEncoder: iso8601
+  torrentlog:
+    service_name: kraken-agent
+    path: /var/log/kraken/kraken-agent/torrent.log
+    encoding: json
+    timeEncoder: epoch
+  dispatch:
+    piece_request_policy: rarest_first
+  conn:
+    bandwidth:
+      enable: true
+
+store:
+  download_dir: /var/cache/kraken/kraken-agent/download/
+  cache_dir:  /var/cache/kraken/kraken-agent/cache/
+  download_cleanup:
+    ttl: 24h
+  cache_cleanup:
+    ttl: 24h
+
+registry:
+  docker:
+    version: 0.1
+    log:
+      level: error
+    http:
+      net: unix
+      addr: /tmp/kraken-agent-registry.sock
+
+peer_id_factory: addr_hash
+
+# Allow agent to only serve localhost and Docker default bridge requests.
+allowed_cidrs:
+  - 127.0.0.1
+  - 172.17.0.1
+
+nginx:
+  name: kraken-agent
+  cache_dir: /var/cache/kraken/kraken-agent/nginx/
+  log_dir: /var/log/kraken/kraken-agent/

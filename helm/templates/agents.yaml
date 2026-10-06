@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kraken-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kraken
+      app.kubernetes.io/component: agent
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kraken
+        app.kubernetes.io/component: agent
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      {{ with .Values.agent.annotations }}
+      annotations:
+{{ tpl . $ | indent 8 -}}
+      {{- end }}
+    spec:
+      {{ with .Values.agent.tolerations -}}
+      tolerations:
+{{ toYaml . | indent 6 }}
+      {{- end -}}
+      {{ with .Values.agent.initContainers -}}
+      initContainers:
+{{ toYaml . | indent 6 -}}
+      {{- end -}}
+      containers:
+      - name: main
+        image: {{ .Values.kraken.repository }}/kraken-agent:{{ .Values.kraken.tag }}
+        imagePullPolicy: {{ .Values.kraken.imagePullPolicy }}
+        command:
+        - /usr/bin/kraken-agent
+        - --config={{ .Values.agent.config }}
+        - --agent-server-port=80
+        - --peer-port=8080
+        - --agent-registry-port=8081
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+{{ with .Values.agent.extraVolumeMounts }}{{ toYaml . | indent 8 }}{{ end }}
+      volumes:
+      - name: config
+        configMap:
+          name: kraken
+{{ with .Values.agent.extraVolumes }}{{ toYaml . | indent 6 }}{{ end }}
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: kraken-agent
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: kraken
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8081
+    nodePort: {{ .Values.kraken.registry_port }}
+  externalTrafficPolicy: Local

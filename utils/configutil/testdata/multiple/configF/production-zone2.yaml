@@ -1,0 +1,5 @@
+extends: ../configG/production.yaml
+servers:
+  - 127.0.0.1:04
+nodes:
+  configFProdZone2: nodeF

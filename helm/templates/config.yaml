@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kraken
+data:
+  agent.yaml: {{ tpl (.Files.Get "config/agent.yaml") . | toYaml | indent 2 }}
+  build-index.yaml: {{ tpl (.Files.Get "config/build-index.yaml") . | toYaml | indent 2 }}
+  origin.yaml: {{ tpl (.Files.Get "config/origin.yaml") . | toYaml | indent 2 }}
+  proxy.yaml: {{ tpl (.Files.Get "config/proxy.yaml") . | toYaml | indent 2 }}
+  tracker.yaml: {{ tpl (.Files.Get "config/tracker.yaml") . | toYaml | indent 2 }}

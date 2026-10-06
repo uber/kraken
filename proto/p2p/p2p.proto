@@ -1,0 +1,99 @@
+/*
+  P2PMessage represents a flavor of a P2P torrent protocol that kraken supports
+*/
+
+syntax = "proto3";
+
+package p2p;
+
+// Binary set of all pieces that peer has downloaded so far. Also serves as a
+// handshaking message, which each peer sends once at the beginning of the
+// connection to declare what their peer id is and what info hash they want to
+// transmit.
+message BitfieldMessage {
+    string infoHash = 2;
+    // TODO: Torrent name is the content hash. Current torrent storage is 
+    // content addressable. Adding name as a part of handshake makes looking  
+    // up torrents faster. If storage supports addressing torrent by infohash, 
+    // this extra field should removed. 
+    // XXX(codyg): We rely on this name field for announcing too, so tracker can
+    // look up origins that have this content.
+    // We currently treat infohash as verification of torrents.
+    string name          = 3;
+    string peerID        = 4;
+    bytes  bitfieldBytes = 5;
+    string namespace     = 6;
+
+    // remoteBitfieldBytes contains the binary sets of pieces downloaded of
+    // all peers that the sender is currently connected to.
+    map<string, bytes> remoteBitfieldBytes = 7;
+}
+
+// Requests a piece of the given index. Note: offset and length are unused fields
+// and if set, will be rejected.
+message PieceRequestMessage {
+    int32 index  = 2;
+    int32 offset = 3; // Unused.
+    int32 length = 4; // Unused.
+}
+
+// Provides binary payload response to a peer request. Always immediately followed
+// by a binary blob sent over socket, so the receiver should be ready to treat the
+// blob as a non-protobuf message.
+message PiecePayloadMessage {
+    int32  index  = 2;
+    int32  offset = 3; // Unused.
+    int32  length = 4; // Unused.
+    string digest = 5; // Cryptographic signature of a piece content (sha1, md5).
+}
+
+// Announces that a piece is available to other peers.
+message AnnouncePieceMessage {
+    int32 index = 2;
+}
+
+// Unused.
+message CancelPieceMessage {
+    int32 index = 2;
+}
+
+// General purpose error message. Receivers may check the error code to determine
+// the origin of the message.
+message ErrorMessage {
+
+    enum ErrorCode {
+        PIECE_REQUEST_FAILED = 0;
+    }
+
+    string    error = 2;
+    int32     index = 3;
+    ErrorCode code  = 4;
+}
+
+// Notifies other peers that the torrent has completed and all pieces are available.
+message CompleteMessage {}
+
+message Message {
+
+    enum Type {
+        BITFIELD      = 0;
+        PIECE_REQUEST = 1;
+        PIECE_PAYLOAD = 2;
+        ANNOUCE_PIECE = 3;
+        CANCEL_PIECE  = 4;
+        ERROR         = 5;
+        COMPLETE      = 6;
+    }
+
+    string version = 1;
+
+    Type type = 2;
+
+    BitfieldMessage      bitfield      = 3;
+    PieceRequestMessage  pieceRequest  = 4;
+    PiecePayloadMessage  piecePayload  = 5;
+    AnnouncePieceMessage announcePiece = 6;
+    CancelPieceMessage   cancelPiece   = 7;
+    ErrorMessage         error         = 8;
+    CompleteMessage      complete      = 9;
+}

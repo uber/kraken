@@ -1,0 +1,47 @@
+zap:
+  level: info
+  development: false
+  disableStacktrace: true
+  encoding: console
+  encoderConfig:
+    messageKey: message
+    nameKey: logger_name
+    levelKey: level
+    timeKey: ts
+    callerKey: caller
+    stacktraceKey: stack
+    levelEncoder: capital
+    timeEncoder: iso8601
+    durationEncoder: seconds
+    callerEncoder: short
+  outputPaths:
+    - stdout
+    - /var/log/kraken/kraken-tracker/stdout.log
+  errorOutputPaths:
+    - stdout
+    - /var/log/kraken/kraken-tracker/stdout.log
+
+logging:
+  level: info
+  stdout: true
+  sentry:
+    enabled: false
+    tags:
+      deployment: default
+
+peerhandoutpolicy:
+  priority: completeness
+
+metrics:
+  m3:
+    service: kraken
+
+trackerserver:
+  listener:
+    net: unix
+    addr: /tmp/kraken-tracker.sock
+
+nginx:
+  name: kraken-tracker
+  cache_dir: /var/cache/kraken/kraken-tracker/nginx/
+  log_dir: /var/log/kraken/kraken-tracker/

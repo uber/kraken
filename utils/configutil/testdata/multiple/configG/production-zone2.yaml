@@ -1,0 +1,5 @@
+extends: production.yaml
+servers:
+  - 127.0.0.1:05
+nodes:
+  configGProdZone2: nodeG

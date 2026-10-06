@@ -1,0 +1,126 @@
+// Copyright (c) 2016-2019 Uber Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package store
+
+import (
+	"os"
+
+	"github.com/andres-erbsen/clock"
+	"github.com/uber/kraken/utils/testutil"
+
+	"github.com/uber-go/tally"
+)
+
+func tempdir(cleanup *testutil.Cleanup, name string) string {
+	d, err := os.MkdirTemp("/tmp", name)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(func() {
+		if err := os.RemoveAll(d); err != nil {
+			panic(err)
+		}
+	})
+	return d
+}
+
+// CAStoreConfigFixture returns config for CAStore for testing purposes.
+func CAStoreConfigFixture() (CAStoreConfig, func()) {
+	cleanup := &testutil.Cleanup{}
+	defer cleanup.Recover()
+
+	upload := tempdir(cleanup, "upload")
+	cache := tempdir(cleanup, "cache")
+
+	return CAStoreConfig{
+		UploadDir:            upload,
+		CacheDir:             cache,
+		SkipHashVerification: false,
+	}, cleanup.Run
+}
+
+// CAStoreFixture returns a CAStore for testing purposes.
+func CAStoreFixture() (*CAStore, func()) {
+	var cleanup testutil.Cleanup
+	defer cleanup.Recover()
+
+	config, c := CAStoreConfigFixture()
+	cleanup.Add(c)
+
+	s, err := NewCAStore(config, tally.NoopScope)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(s.Close)
+
+	return s, cleanup.Run
+}
+
+// CAStoreFixtureWithClock returns a CAStore with a custom clock for testing purposes.
+// This is useful for tests that need to control time, such as preventing automatic
+// drain operations in memory cache tests.
+func CAStoreFixtureWithClock(config CAStoreConfig, clk clock.Clock) (*CAStore, func()) {
+	var cleanup testutil.Cleanup
+	defer cleanup.Recover()
+
+	s, err := newCAStore(config, tally.NoopScope, clk)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(s.Close)
+
+	return s, cleanup.Run
+}
+
+// CADownloadStoreFixture returns a CADownloadStore for testing purposes.
+func CADownloadStoreFixture() (*CADownloadStore, func()) {
+	cleanup := &testutil.Cleanup{}
+	defer cleanup.Recover()
+
+	download := tempdir(cleanup, "download")
+	cache := tempdir(cleanup, "cache")
+
+	config := CADownloadStoreConfig{
+		DownloadDir: download,
+		CacheDir:    cache,
+	}
+	s, err := NewCADownloadStore(config, tally.NoopScope)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(s.Close)
+
+	return s, cleanup.Run
+}
+
+// SimpleStoreFixture returns a SimpleStore for testing purposes.
+func SimpleStoreFixture() (*SimpleStore, func()) {
+	cleanup := &testutil.Cleanup{}
+	defer cleanup.Recover()
+
+	upload := tempdir(cleanup, "upload")
+	cache := tempdir(cleanup, "cache")
+
+	config := SimpleStoreConfig{
+		UploadDir: upload,
+		CacheDir:  cache,
+	}
+	s, err := NewSimpleStore(config, tally.NoopScope)
+	if err != nil {
+		panic(err)
+	}
+	cleanup.Add(s.Close)
+
+	return s, cleanup.Run
+}

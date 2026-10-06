@@ -1,0 +1,14 @@
+apiVersion: v2
+name: kraken
+description: P2P Docker registry capable of distributing TBs of data in seconds
+version: 0.2.0
+kubeVersion: ">=1.10.0"
+keywords:
+  - http
+  - docker
+  - registry
+  - p2p
+home: https://github.com/uber/kraken/helm
+maintainers:
+  - name: Antoine Pourchet
+    email: antoine.pourchet@gmail.com

@@ -1,0 +1,5 @@
+extends: production.yaml
+servers:
+  - 127.0.0.1:03
+nodes:
+  configCProdZone2: nodeC
