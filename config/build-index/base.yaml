@@ -1,0 +1,46 @@
+localdb:
+  source: /var/cache/kraken/kraken-build-index/index.db
+
+store:
+  upload_dir: /var/cache/kraken/kraken-build-index/upload/
+  cache_dir: /var/cache/kraken/kraken-build-index/cache/
+
+tag_store:
+  write_through: true
+
+zap:
+  level: info
+  development: false
+  encoding: console
+  disableStacktrace: true
+  encoderConfig:
+    messageKey: message
+    nameKey: logger_name
+    levelKey: level
+    timeKey: ts
+    callerKey: caller
+    stacktraceKey: stack
+    levelEncoder: capital
+    timeEncoder: iso8601
+    durationEncoder: seconds
+    callerEncoder: short
+  outputPaths:
+    - stdout
+    - /var/log/kraken/kraken-build-index/stdout.log
+  errorOutputPaths:
+    - stdout
+    - /var/log/kraken/kraken-build-index/stdout.log
+
+metrics:
+  m3:
+    service: kraken-build-index
+
+tagserver:
+  listener:
+    net: unix
+    addr: /tmp/kraken-build-index.sock
+
+nginx:
+  name: kraken-build-index
+  cache_dir: /var/cache/kraken/kraken-build-index/nginx/
+  log_dir: /var/log/kraken/kraken-build-index/

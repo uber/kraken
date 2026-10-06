@@ -1,0 +1,35 @@
+extends: /etc/kraken/config/build-index/base.yaml
+{{ include "tls" . }}
+{{ include "build-index-cluster" . }}
+{{ include "origins" . }}
+backends:
+{{ with .Values.build_index.extraBackends }}{{ tpl . $ | indent 2 }}{{ end }}
+{{ if .Values.testfs.enabled }}
+  - namespace: .*
+    backend:
+      testfs:
+        addr: kraken-testfs:80
+        root: tags
+        name_path: docker_tag
+{{ end }}
+
+remotes: {}
+
+tag_replication:
+  retry_interval: 100ms
+  poll_retries_interval: 250ms
+
+tag_types:
+  - namespace: .*
+    type: docker
+    root: tags
+
+tag_store:
+  write_through: false
+
+writeback:
+  retry_interval: 100ms
+  poll_retries_interval: 250ms
+
+nginx:
+  cache_dir: /tmp/kraken-build-index-nginx/

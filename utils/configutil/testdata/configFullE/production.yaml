@@ -1,0 +1,6 @@
+extends: base.yaml
+listen_address: configFullEProd:02
+buffer_space: 5000
+servers:
+  - configFullEProd:02
+  - configFullEProd:03

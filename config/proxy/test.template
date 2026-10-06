@@ -1,0 +1,32 @@
+extends: base.yaml
+
+origin:
+  hosts:
+    static: {origins}
+
+build_index:
+  hosts:
+    static: {build_indexes}
+
+nginx:
+  cache_dir: /tmp/kraken-proxy-nginx/
+
+tls:
+  name: kraken
+  cas:
+  - path: /etc/kraken/tls/ca/server.crt
+  server:
+    disabled: true
+    cert:
+      path: /etc/kraken/tls/ca/server.crt
+    key:
+      path: /etc/kraken/tls/ca/server.key
+    passphrase:
+      path: /etc/kraken/tls/ca/passphrase
+  client:
+    cert:
+      path: /etc/kraken/tls/client/client.crt
+    key:
+      path: /etc/kraken/tls/client/client.key
+    passphrase:
+      path: /etc/kraken/tls/client/passphrase

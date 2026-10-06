@@ -1,0 +1,35 @@
+# golangci-lint configuration file
+# See https://golangci-lint.run/usage/configuration/ for more options
+version: "2"
+linters:
+  enable:
+    - errcheck # Check for unchecked errors
+    - govet # Examine Go source code and reports suspicious constructs
+    - ineffassign # Detect ineffectual assignments
+    - staticcheck # Static analysis checks
+    - unused # Check for unused constants, variables, functions and types
+    - copyloopvar # Check for pointers to enclosing loop variables
+  settings:
+    errcheck:
+      # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
+      # Such cases aren't reported by default.
+      # Default: false
+      check-type-assertions: true
+      # report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`.
+      # Such cases aren't reported by default.
+      # Default: false
+      check-blank: true
+  exclusions:
+    rules:
+      # Exclude staticcheck deprecation warnings in generated proto files
+      - linters:
+          - staticcheck
+        path: "gen/go/proto/.*\\.pb\\.go$"
+      # Exclude staticcheck deprecation warnings for proto imports
+      - linters:
+          - staticcheck
+        text: "SA1019.*github.com/golang/protobuf/proto.*is deprecated"
+formatters:
+  enable:
+    - gofmt # Format Go code
+    - goimports # Format Go code and add missing imports

@@ -1,0 +1,20 @@
+#!/bin/sh
+
+echo "Running golangci-lint on new changes..."
+
+# Check if there are staged changes
+if ! git diff --cached --quiet; then
+    # Run golangci-lint only on new changes
+    golangci-lint run --new-from-rev=HEAD --fix=true
+
+    if [ $? -ne 0 ]; then
+        echo "golangci-lint found issues in new code. Please fix before committing."
+        exit 1
+    fi
+
+    echo "golangci-lint passed for new changes!"
+else
+    echo "No staged changes to lint."
+fi
+
+exit 0

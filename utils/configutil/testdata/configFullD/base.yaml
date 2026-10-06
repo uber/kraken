@@ -1,0 +1,5 @@
+listen_address: configFullDBase:01
+buffer_space: 1000
+servers:
+  - configFullDBase:01
+  - configFullDBase:02

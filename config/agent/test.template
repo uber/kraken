@@ -1,0 +1,33 @@
+extends: base.yaml
+
+scheduler:
+  connstate:
+    blacklist_duration: 5s
+
+peer_id_factory: random
+
+container_runtime:
+  docker:
+    docker_version: "1.24"
+
+tracker:
+  hosts:
+    static: {trackers}
+
+build_index:
+  hosts:
+    static: {build_indexes}
+
+tls:
+  name: kraken
+  cas:
+  - path: /etc/kraken/tls/ca/server.crt
+  server:
+    disabled: true
+  client:
+    cert:
+      path: /etc/kraken/tls/client/client.crt
+    key:
+      path: /etc/kraken/tls/client/client.key
+    passphrase:
+      path: /etc/kraken/tls/client/passphrase
