@@ -247,30 +247,34 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 // validateTLSFiles checks that the files required for server TLS exist.
 // The key passphrase is optional and only checked when a path is set.
 func validateTLSFiles(tls httputil.TLSConfig) error {
-	check := func(key, p string) error {
-		if p == "" {
-			return fmt.Errorf("%s is required", key)
-		}
-		if _, err := os.Stat(p); err != nil {
-			return fmt.Errorf("%s: %s", key, err)
-		}
-		return nil
-	}
 	for i, ca := range tls.CAs {
-		if err := check(fmt.Sprintf("tls.cas[%d].path", i), ca.Path); err != nil {
+		if err := checkTLSFile(fmt.Sprintf("tls.cas[%d].path", i), ca.Path); err != nil {
 			return err
 		}
 	}
-	if err := check("tls.server.cert.path", tls.Server.Cert.Path); err != nil {
+	if err := checkTLSFile("tls.server.cert.path", tls.Server.Cert.Path); err != nil {
 		return err
 	}
-	if err := check("tls.server.key.path", tls.Server.Key.Path); err != nil {
+	if err := checkTLSFile("tls.server.key.path", tls.Server.Key.Path); err != nil {
 		return err
 	}
 	if tls.Server.Passphrase.Path != "" {
-		if err := check("tls.server.passphrase.path", tls.Server.Passphrase.Path); err != nil {
+		err := checkTLSFile("tls.server.passphrase.path", tls.Server.Passphrase.Path)
+		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// checkTLSFile returns an error naming the config key if path is empty or
+// cannot be stat'd.
+func checkTLSFile(key, path string) error {
+	if path == "" {
+		return fmt.Errorf("%s is required", key)
+	}
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("%s: %s", key, err)
 	}
 	return nil
 }

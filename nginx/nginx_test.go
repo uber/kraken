@@ -23,6 +23,7 @@ import (
 )
 
 func writeTLSFiles(t *testing.T) (ca, cert, key, passphrase string) {
+	t.Helper()
 	dir := t.TempDir()
 	for _, name := range []string{"ca.crt", "tls.crt", "tls.key", "passphrase"} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600))
@@ -37,42 +38,64 @@ func TestValidateTLSFiles(t *testing.T) {
 	ca, cert, key, passphrase := writeTLSFiles(t)
 	missing := filepath.Join(t.TempDir(), "missing")
 
-	newConfig := func() httputil.TLSConfig {
-		return httputil.TLSConfig{
-			CAs: []httputil.Secret{{Path: ca}},
-			Server: httputil.X509Pair{
-				Cert: httputil.Secret{Path: cert},
-				Key:  httputil.Secret{Path: key},
-			},
-		}
-	}
-
 	tests := []struct {
-		desc    string
-		modify  func(*httputil.TLSConfig)
-		wantErr string
+		desc       string
+		cas        []string
+		cert       string
+		key        string
+		passphrase string
+		wantErr    string
 	}{
-		{"no passphrase", func(*httputil.TLSConfig) {}, ""},
-		{"with passphrase", func(c *httputil.TLSConfig) {
-			c.Server.Passphrase.Path = passphrase
-		}, ""},
-		{"missing passphrase file", func(c *httputil.TLSConfig) {
-			c.Server.Passphrase.Path = missing
-		}, "tls.server.passphrase.path"},
-		{"missing cert file", func(c *httputil.TLSConfig) {
-			c.Server.Cert.Path = missing
-		}, "tls.server.cert.path"},
-		{"empty key path", func(c *httputil.TLSConfig) {
-			c.Server.Key.Path = ""
-		}, "tls.server.key.path is required"},
-		{"missing ca file", func(c *httputil.TLSConfig) {
-			c.CAs = append(c.CAs, httputil.Secret{Path: missing})
-		}, "tls.cas[1].path"},
+		{
+			desc: "no passphrase",
+			cas:  []string{ca},
+			cert: cert,
+			key:  key,
+		}, {
+			desc:       "with passphrase",
+			cas:        []string{ca},
+			cert:       cert,
+			key:        key,
+			passphrase: passphrase,
+		}, {
+			desc:       "missing passphrase file",
+			cas:        []string{ca},
+			cert:       cert,
+			key:        key,
+			passphrase: missing,
+			wantErr:    "tls.server.passphrase.path",
+		}, {
+			desc:    "missing cert file",
+			cas:     []string{ca},
+			cert:    missing,
+			key:     key,
+			wantErr: "tls.server.cert.path",
+		}, {
+			desc:    "empty key path",
+			cas:     []string{ca},
+			cert:    cert,
+			key:     "",
+			wantErr: "tls.server.key.path is required",
+		}, {
+			desc:    "missing ca file",
+			cas:     []string{ca, missing},
+			cert:    cert,
+			key:     key,
+			wantErr: "tls.cas[1].path",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			c := newConfig()
-			test.modify(&c)
+			c := httputil.TLSConfig{
+				Server: httputil.X509Pair{
+					Cert:       httputil.Secret{Path: test.cert},
+					Key:        httputil.Secret{Path: test.key},
+					Passphrase: httputil.Secret{Path: test.passphrase},
+				},
+			}
+			for _, p := range test.cas {
+				c.CAs = append(c.CAs, httputil.Secret{Path: p})
+			}
 			err := validateTLSFiles(c)
 			if test.wantErr == "" {
 				require.NoError(t, err)
