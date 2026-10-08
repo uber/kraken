@@ -40,7 +40,7 @@ server {
   proxy_read_timeout {{if .proxy_read_timeout}}{{.proxy_read_timeout}}{{else}}10m{{end}};
 
   gzip on;
-  gzip_types text/plain test/csv application/json;
+  gzip_types text/plain text/csv application/json;
 
 {{healthEndpoint "agent-server"}}
 
