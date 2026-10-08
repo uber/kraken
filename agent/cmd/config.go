@@ -19,7 +19,7 @@ import (
 	"github.com/uber/kraken/lib/containerruntime"
 	"github.com/uber/kraken/lib/containerruntime/dockerdaemon"
 	"github.com/uber/kraken/lib/dockerregistry"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler"
 	"github.com/uber/kraken/lib/upstream"
@@ -34,7 +34,7 @@ import (
 type Config struct {
 	ZapLogging       zap.Config                     `yaml:"zap"`
 	Metrics          metrics.Config                 `yaml:"metrics"`
-	CADownloadStore  store.CADownloadStoreConfig    `yaml:"store"`
+	DiskStore        disk.Config                    `yaml:"diskstore"`
 	Registry         dockerregistry.Config          `yaml:"registry"`
 	Scheduler        scheduler.Config               `yaml:"scheduler"`
 	PeerIDFactory    core.PeerIDFactory             `yaml:"peer_id_factory"`

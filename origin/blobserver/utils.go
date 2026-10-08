@@ -15,12 +15,9 @@ package blobserver
 
 import (
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
-	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/handler"
 )
 
@@ -53,15 +50,18 @@ func parseContentRange(h http.Header) (start, end int64, err error) {
 	return start, end, nil
 }
 
-// blobExists returns true if cas has a cached blob for d.
-func blobExists(cas *store.CAStore, d core.Digest) (bool, error) {
-	if _, err := cas.GetCacheFileStat(d.Hex()); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, handler.Errorf("cache file stat: %s", err)
+// parseUploadSize parses the required "size" query arg.
+func parseUploadSize(r *http.Request) (uint64, error) {
+	raw := r.URL.Query().Get("size")
+	if raw == "" {
+		return 0, handler.Errorf("size query arg is required").Status(http.StatusBadRequest)
 	}
-	return true, nil
+	size, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return 0, handler.Errorf("cannot parse size query arg %q: %s", raw, err).
+			Status(http.StatusBadRequest)
+	}
+	return size, nil
 }
 
 func setUploadLocation(w http.ResponseWriter, uid string) {

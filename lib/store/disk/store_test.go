@@ -14,6 +14,7 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
@@ -27,19 +28,16 @@ const (
 )
 
 func newTestStore(t *testing.T, capacity uint64, rebootIncompleteBlobs bool) (res *Store, rootDir string) {
-	rootDir, err := os.MkdirTemp("/tmp", "kraken-disk-store")
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, os.RemoveAll(rootDir)) })
 	config := &Config{
-		CapacityBytes:         capacity,
-		RootDir:               rootDir,
+		Capacity:              capacity,
+		RootDir:               t.TempDir(),
 		RebootIncompleteBlobs: rebootIncompleteBlobs,
 		ShardLength:           _defaultShardLength,
 	}
 
-	store, err := NewStore(config, tally.NoopScope)
+	store, err := NewStore(config, tally.NoopScope, clock.New())
 	require.NoError(t, err)
-	return store, rootDir
+	return store, store.impl.config.RootDir
 }
 
 func newTestFile(t *testing.T, store *Store, size uint64) (f storelib.FileReadWriter, key string) {
@@ -565,6 +563,154 @@ func TestMarkComplete(t *testing.T) {
 	})
 }
 
+func TestRenameKey(t *testing.T) {
+	t.Run("incomplete blob", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		key := core.DigestFixture().Hex()
+		newKey := core.DigestFixture().Hex()
+		f, err := store.Create(key, 100*memsize.B)
+		require.NoError(err)
+		_, err = io.Copy(f, bytes.NewReader(make([]byte, 100)))
+		require.NoError(err)
+		require.NoError(f.Close())
+
+		require.NoError(store.RenameKey(key, newKey))
+
+		_, err = store.Stat(key)
+		require.ErrorIs(err, os.ErrNotExist)
+		fInfo, err := store.Stat(newKey)
+		require.NoError(err)
+		require.Equal(int64(100), fInfo.Size())
+		_, err = store.ScopeComplete().Stat(newKey)
+		require.Equal(storelib.ErrOutOfScope, err)
+	})
+
+	t.Run("complete blob", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		key := core.DigestFixture().Hex()
+		newKey := core.DigestFixture().Hex()
+		f, err := store.Create(key, 100*memsize.B)
+		require.NoError(err)
+		_, err = io.Copy(f, bytes.NewReader(make([]byte, 100)))
+		require.NoError(err)
+		require.NoError(f.Close())
+		require.NoError(store.MarkComplete(key))
+
+		require.NoError(store.RenameKey(key, newKey))
+
+		_, err = store.Stat(key)
+		require.ErrorIs(err, os.ErrNotExist)
+		require.Equal([]string{newKey}, store.ScopeComplete().List())
+		_, err = store.ScopeComplete().Open(newKey)
+		require.NoError(err)
+	})
+
+	t.Run("preserves eviction order", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+
+		var keys []string
+		for i := 0; i < 3; i++ {
+			key := core.DigestFixture().Hex()
+			f, err := store.Create(key, 100*memsize.B)
+			require.NoError(err)
+			require.NoError(f.Close())
+			require.NoError(store.MarkComplete(key))
+			keys = append(keys, key)
+		}
+
+		newMiddleKey := core.DigestFixture().Hex()
+		require.NoError(store.RenameKey(keys[1], newMiddleKey))
+
+		require.Equal([]string{keys[0], newMiddleKey, keys[2]}, store.impl.evictionOrder())
+	})
+
+	t.Run("preserves eviction ban", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		key := core.DigestFixture().Hex()
+		newKey := core.DigestFixture().Hex()
+		f, err := store.Create(key, 100*memsize.B)
+		require.NoError(err)
+		require.NoError(f.Close())
+		require.NoError(store.MarkComplete(key))
+		require.NoError(store.BanEviction(key))
+
+		require.NoError(store.RenameKey(key, newKey))
+
+		require.Empty(store.impl.evictionOrder())
+		unevictable, err := store.impl.checkDiskIfUnevictable(newKey, _completeBlob)
+		require.NoError(err)
+		require.True(unevictable)
+	})
+
+	t.Run("preserves metadata, dropping immovable metadata on a subsequent MarkComplete", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		key := core.DigestFixture().Hex()
+		newKey := core.DigestFixture().Hex()
+		f, err := store.Create(key, 10*memsize.KB)
+		require.NoError(err)
+		require.NoError(f.Close())
+		movableMd := metadata.NewTorrentMeta(core.MetaInfoFixture())
+		require.NoError(store.SetMetadata(key, movableMd))
+		require.NoError(store.SetMetadata(key, &immovableMd{}))
+
+		require.NoError(store.RenameKey(key, newKey))
+
+		var readMovableMd metadata.TorrentMeta
+		ok, err := store.GetMetadata(newKey, &readMovableMd)
+		require.NoError(err)
+		require.True(ok)
+		require.Equal(movableMd.MetaInfo, readMovableMd.MetaInfo)
+		readImmovableMd := immovableMd{}
+		ok, err = store.GetMetadata(newKey, &readImmovableMd)
+		require.NoError(err)
+		require.True(ok)
+
+		require.NoError(store.MarkComplete(newKey))
+
+		ok, err = store.GetMetadata(newKey, &readMovableMd)
+		require.NoError(err)
+		require.True(ok)
+		ok, err = store.GetMetadata(newKey, &readImmovableMd)
+		require.NoError(err)
+		require.False(ok)
+	})
+
+	t.Run("newKey already exists", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		key := core.DigestFixture().Hex()
+		newKey := core.DigestFixture().Hex()
+		f, err := store.Create(key, 100*memsize.B)
+		require.NoError(err)
+		require.NoError(f.Close())
+		f2, err := store.Create(newKey, 100*memsize.B)
+		require.NoError(err)
+		require.NoError(f2.Close())
+
+		err = store.RenameKey(key, newKey)
+		require.ErrorIs(err, os.ErrExist)
+
+		// key is left untouched.
+		_, err = store.Stat(key)
+		require.NoError(err)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		key := core.DigestFixture().Hex()
+		newKey := core.DigestFixture().Hex()
+
+		err := store.RenameKey(key, newKey)
+		require.ErrorIs(err, os.ErrNotExist)
+	})
+}
+
 func TestStat(t *testing.T) {
 	t.Run("complete blob", func(t *testing.T) {
 		require := require.New(t)
@@ -664,6 +810,41 @@ func TestStat(t *testing.T) {
 		require.ErrorIs(os.ErrNotExist, err)
 		_, err = store.Stat(key)
 		require.ErrorIs(os.ErrNotExist, err)
+	})
+}
+
+func TestFile__SizeWorksAfterClose(t *testing.T) {
+	t.Run("after Close", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		f, _ := newTestFile(t, store, 1*memsize.KB)
+		data := fillWithRandomData(t, f, 100)
+
+		require.NoError(f.Close())
+
+		require.Equal(int64(len(data)), f.Size())
+	})
+
+	t.Run("after Commit", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		f, _ := newTestFile(t, store, 1*memsize.KB)
+		data := fillWithRandomData(t, f, 100)
+
+		require.NoError(f.Commit())
+
+		require.Equal(int64(len(data)), f.Size())
+	})
+
+	t.Run("after Cancel", func(t *testing.T) {
+		require := require.New(t)
+		store, _ := newTestStore(t, 10*memsize.KB, false)
+		f, _ := newTestFile(t, store, 1*memsize.KB)
+		data := fillWithRandomData(t, f, 100)
+
+		require.NoError(f.Cancel())
+
+		require.Equal(int64(len(data)), f.Size())
 	})
 }
 
@@ -984,6 +1165,7 @@ func TestScopes(t *testing.T) {
 	require.NotContains(store.ScopeComplete().List(), key)
 	_, ok = store.ScopeComplete().Has(key)
 	require.False(ok)
+	require.ErrorIs(store.ScopeComplete().RenameKey(key, core.DigestFixture().Hex()), storelib.ErrOutOfScope)
 
 	// The unscoped store's APIs work regardless of completeness.
 	f, err = store.Open(key)
@@ -1010,6 +1192,9 @@ func TestScopes(t *testing.T) {
 	require.Contains(store.List(), key)
 	_, ok = store.Has(key)
 	require.True(ok)
+	tmpKey := core.DigestFixture().Hex()
+	require.NoError(store.RenameKey(key, tmpKey))
+	require.NoError(store.RenameKey(tmpKey, key))
 
 	// ScopeIncomplete's APIs also work, since the blob is (still) incomplete.
 	f, err = store.ScopeIncomplete().Open(key)
@@ -1039,6 +1224,9 @@ func TestScopes(t *testing.T) {
 	require.Contains(store.List(), key)
 	_, ok = store.Has(key)
 	require.True(ok)
+	tmpKey = core.DigestFixture().Hex()
+	require.NoError(store.ScopeIncomplete().RenameKey(key, tmpKey))
+	require.NoError(store.ScopeIncomplete().RenameKey(tmpKey, key))
 
 	require.NoError(store.MarkComplete(key))
 
@@ -1060,6 +1248,7 @@ func TestScopes(t *testing.T) {
 	require.NotContains(store.ScopeIncomplete().List(), key)
 	_, ok = store.ScopeIncomplete().Has(key)
 	require.False(ok)
+	require.ErrorIs(store.ScopeIncomplete().RenameKey(key, core.DigestFixture().Hex()), storelib.ErrOutOfScope)
 
 	// The unscoped store's APIs still work regardless of completeness.
 	f, err = store.Open(key)
@@ -1086,6 +1275,9 @@ func TestScopes(t *testing.T) {
 	require.Contains(store.List(), key)
 	_, ok = store.Has(key)
 	require.True(ok)
+	tmpKey = core.DigestFixture().Hex()
+	require.NoError(store.RenameKey(key, tmpKey))
+	require.NoError(store.RenameKey(tmpKey, key))
 
 	// ScopeComplete's APIs now work, since the blob is complete.
 	f, err = store.ScopeComplete().Open(key)
@@ -1112,6 +1304,9 @@ func TestScopes(t *testing.T) {
 	require.Contains(store.ScopeComplete().List(), key)
 	_, ok = store.ScopeComplete().Has(key)
 	require.True(ok)
+	tmpKey = core.DigestFixture().Hex()
+	require.NoError(store.ScopeComplete().RenameKey(key, tmpKey))
+	require.NoError(store.ScopeComplete().RenameKey(tmpKey, key))
 }
 
 func TestScopesDelete(t *testing.T) {
@@ -1259,11 +1454,11 @@ func TestConfig__applyDefaults(t *testing.T) {
 				RebootIncompleteBlobs: false,
 				ShardLength:           _defaultShardLength,
 			},
-			wantErr: "capacity_bytes must be explicitly set",
+			wantErr: "capacity must be explicitly set",
 		},
 		"shard length cannot be negative": {
 			config: &Config{
-				CapacityBytes:         10 * memsize.KB,
+				Capacity:              10 * memsize.KB,
 				RootDir:               t.TempDir(),
 				RebootIncompleteBlobs: false,
 				ShardLength:           -1,
@@ -1272,7 +1467,7 @@ func TestConfig__applyDefaults(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := NewStore(tt.config, tally.NoopScope)
+			_, err := NewStore(tt.config, tally.NoopScope, clock.New())
 			if tt.wantErr != "" {
 				require.EqualError(t, err, tt.wantErr)
 			} else {
@@ -1280,4 +1475,107 @@ func TestConfig__applyDefaults(t *testing.T) {
 			}
 		})
 	}
+}
+
+func createAgedIncompleteBlob(t *testing.T, store *Store, key string, age time.Duration) {
+	require := require.New(t)
+
+	f, err := store.Create(key, 1)
+	require.NoError(err)
+	require.NoError(f.Close())
+
+	mtime := store.impl.clk.Now().Add(-age)
+	blobPath := store.impl.blobPath(key, _incompleteBlob)
+	require.NoError(os.Chtimes(blobPath, mtime, mtime))
+}
+
+func TestLeakCleaner(t *testing.T) {
+	const _margin = 5 * time.Second
+
+	t.Run("deletes a leaked blob once it crosses the TTI", func(t *testing.T) {
+		require := require.New(t)
+		clk := clock.NewMock()
+		clk.Set(time.Now())
+		config := &Config{Capacity: 10 * memsize.MB, RootDir: t.TempDir(), ShardLength: 0}
+		store, err := NewStore(config, tally.NoopScope, clk)
+		require.NoError(err)
+		t.Cleanup(store.impl.close)
+
+		createAgedIncompleteBlob(t, store, "leaked", config.IncompleteBlobTTI+_margin)
+
+		store.impl.cleanLeakedFiles()
+
+		ok, _ := store.Has("leaked")
+		require.False(ok)
+	})
+
+	t.Run("does not touch blobs still within the TTI", func(t *testing.T) {
+		require := require.New(t)
+		clk := clock.NewMock()
+		clk.Set(time.Now())
+		config := &Config{Capacity: 10 * memsize.MB, RootDir: t.TempDir(), ShardLength: 0}
+		store, err := NewStore(config, tally.NoopScope, clk)
+		require.NoError(err)
+		t.Cleanup(store.impl.close)
+
+		createAgedIncompleteBlob(t, store, "leaked", config.IncompleteBlobTTI+_margin)
+		createAgedIncompleteBlob(t, store, "safe", config.IncompleteBlobTTI-_margin)
+
+		store.impl.cleanLeakedFiles()
+
+		ok, _ := store.Has("leaked")
+		require.False(ok)
+
+		ok, _ = store.Has("safe")
+		require.True(ok)
+	})
+
+	t.Run("fails open: one blob failing to delete does not stop others from being cleaned up", func(t *testing.T) {
+		require := require.New(t)
+		clk := clock.NewMock()
+		clk.Set(time.Now())
+		config := &Config{Capacity: 10 * memsize.MB, RootDir: t.TempDir(), ShardLength: 0}
+		store, err := NewStore(config, tally.NoopScope, clk)
+		require.NoError(err)
+		t.Cleanup(store.impl.close)
+
+		createAgedIncompleteBlob(t, store, "leaked-ok", config.IncompleteBlobTTI+_margin)
+		createAgedIncompleteBlob(t, store, "leaked-blocked", config.IncompleteBlobTTI+_margin)
+
+		// Strip write permission on the blocked blob's own directory so os.RemoveAll fails
+		// deterministically on it, without touching any other blob's directory.
+		blockedDir := store.impl.dirPath("leaked-blocked", _incompleteBlob)
+		require.NoError(os.Chmod(blockedDir, 0555))
+		t.Cleanup(func() { require.NoError(os.Chmod(blockedDir, 0755)) })
+
+		store.impl.cleanLeakedFiles()
+
+		ok, _ := store.Has("leaked-ok")
+		require.False(ok)
+
+		ok, _ = store.Has("leaked-blocked")
+		require.True(ok)
+
+		_, err = os.Stat(store.impl.blobPath("leaked-blocked", _incompleteBlob))
+		require.NoError(err)
+	})
+
+	t.Run("background ticker triggers cleanup on schedule", func(t *testing.T) {
+		require := require.New(t)
+		clk := clock.NewMock()
+		clk.Set(time.Now())
+		config := &Config{Capacity: 10 * memsize.MB, RootDir: t.TempDir(), ShardLength: 0}
+		store, err := NewStore(config, tally.NoopScope, clk)
+		require.NoError(err)
+		t.Cleanup(store.impl.close)
+
+		createAgedIncompleteBlob(t, store, "leaked", config.IncompleteBlobTTI+_margin)
+
+		clk.Add(config.LeakCleanerInterval)
+
+		require.Eventually(func() bool {
+			ok, _ := store.Has("leaked")
+			return !ok
+		}, time.Second, 5*time.Millisecond)
+	})
 }

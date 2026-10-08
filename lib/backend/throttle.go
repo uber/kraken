@@ -15,6 +15,7 @@ package backend
 
 import (
 	"io"
+	"time"
 
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/bandwidth"
@@ -54,14 +55,28 @@ func (c *ThrottledClient) Upload(namespace, name string, src io.Reader) error {
 
 // Download downloads name into dst.
 func (c *ThrottledClient) Download(namespace, name string, dst io.Writer) error {
+	statStart := time.Now()
 	info, err := c.Stat(namespace, name)
+	statTime := time.Since(statStart)
 	if err != nil {
 		return err
 	}
+	reserveStart := time.Now()
 	if err := c.bandwidth.ReserveIngress(info.Size); err != nil {
 		log.With("name", name, "error", err).Errorf("Could not self-throttle during remote blob download. Proceeding with no throttling")
 	}
-	return c.Client.Download(namespace, name, dst)
+	reserveTime := time.Since(reserveStart)
+
+	transferStart := time.Now()
+	err = c.Client.Download(namespace, name, dst)
+	log.With(
+		"name", name,
+		"blob_size", info.Size,
+		"stat_time", statTime,
+		"reserve_ingress_time", reserveTime,
+		"transfer_time", time.Since(transferStart),
+		"error", err).Info("Finished a backend blob download")
+	return err
 }
 
 func (c *ThrottledClient) adjustBandwidth(denominator int) error {

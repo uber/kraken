@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
 	storelib "github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/lib/store/disk"
@@ -35,12 +36,13 @@ func newStore(config *Config, stats tally.Scope) (*store, *disk.Store, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("new mem store: %w", err)
 	}
-	diskStore, err := disk.NewStore(config.DiskConfig, stats)
+	diskStore, err := disk.NewStore(config.DiskConfig, stats, clock.New())
 	if err != nil {
 		return nil, nil, fmt.Errorf("new disk store: %w", err)
 	}
 
 	log := log.Default().With("module", "tiered_store")
+	stats = stats.Tagged(map[string]string{"module": "tiered_store"})
 
 	log.Info("Initialized a new tiered.Store")
 	return &store{
@@ -196,9 +198,11 @@ func (s *store) MarkComplete(key string) error {
 	defer s.mu.Unlock()
 
 	if _, ok := s.mem.ScopeComplete().Has(key); ok {
+		s.log.Warn("MarkComplete called on the same blob. Could point to client misuse of tiered.Store")
 		return nil // no-op
 	}
 	if _, ok := s.disk.ScopeComplete().Has(key); ok {
+		s.log.Warn("MarkComplete called on the same blob. Could point to client misuse of tiered.Store")
 		return nil // no-op
 	}
 
@@ -230,11 +234,11 @@ func (s *store) SetMetadata(key string, md metadata.Metadata, scope storelib.Blo
 	if errors.Is(err, storelib.ErrOutOfScope) {
 		return storelib.ErrOutOfScope
 	}
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("mem store ban eviction: %w", err)
-	}
 	if errors.Is(err, os.ErrNotExist) {
 		return s.disk.Scoped(scope).SetMetadata(key, md)
+	}
+	if err != nil {
+		return fmt.Errorf("mem store ban eviction: %w", err)
 	}
 
 	err = s.mem.SetMetadata(key, md)
@@ -280,4 +284,8 @@ func (s *store) DeleteMetadata(key string, mdSuffix string, scope storelib.BlobS
 	}
 	s.flusher.markMetadataDirty(key, mdSuffix)
 	return nil
+}
+
+func (s *store) Close() {
+	s.flusher.close()
 }

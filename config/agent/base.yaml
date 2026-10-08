@@ -39,13 +39,11 @@ scheduler:
     bandwidth:
       enable: true
 
-store:
-  download_dir: /var/cache/kraken/kraken-agent/download/
-  cache_dir:  /var/cache/kraken/kraken-agent/cache/
-  download_cleanup:
-    ttl: 24h
-  cache_cleanup:
-    ttl: 24h
+diskstore:
+  capacity: 209715200
+  root_dir: /var/cache/kraken/kraken-agent/store/
+  reboot_incomplete_blobs: true
+  shard_length: 2
 
 registry:
   docker:

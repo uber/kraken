@@ -29,7 +29,7 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/hashring"
 	"github.com/uber/kraken/lib/hostlist"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/torrent/networkevent"
 	"github.com/uber/kraken/lib/torrent/scheduler/announcequeue"
 	"github.com/uber/kraken/lib/torrent/scheduler/conn"
@@ -60,13 +60,14 @@ func configFixture() Config {
 }
 
 type testMocks struct {
+	t              *testing.T
 	ctrl           *gomock.Controller
 	metaInfoClient *mockmetainfoclient.MockClient
 	trackerAddr    string
 	cleanup        *testutil.Cleanup
 }
 
-func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
+func newTestMocks(t *testing.T) (*testMocks, func()) {
 	var cleanup testutil.Cleanup
 
 	ctrl := gomock.NewController(t)
@@ -76,6 +77,7 @@ func newTestMocks(t gomock.TestReporter) (*testMocks, func()) {
 	cleanup.Add(stop)
 
 	return &testMocks{
+		t:              t,
 		ctrl:           ctrl,
 		metaInfoClient: mockmetainfoclient.NewMockClient(ctrl),
 		trackerAddr:    trackerAddr,
@@ -89,7 +91,7 @@ type testPeer struct {
 	torrentArchive storage.TorrentArchive
 	stats          tally.TestScope
 	testProducer   *networkevent.TestProducer
-	cads           *store.CADownloadStore
+	store          *disk.Store
 	cleanup        *testutil.Cleanup
 }
 
@@ -101,12 +103,11 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	var cleanup testutil.Cleanup
 	m.cleanup.Add(cleanup.Run)
 
-	cads, c := store.CADownloadStoreFixture()
-	cleanup.Add(c)
+	store := disk.Fixture(m.t)
 
 	stats := tally.NewTestScope("", nil)
 
-	ta := agentstorage.NewTorrentArchive(stats, cads, m.metaInfoClient)
+	ta := agentstorage.NewTorrentArchive(stats, store, m.metaInfoClient)
 
 	tp := networkevent.NewTestProducer()
 
@@ -141,7 +142,7 @@ func (m *testMocks) newPeer(config Config, options ...option) *testPeer {
 	}
 	cleanup.Add(s.Stop)
 
-	return &testPeer{pctx, s, ta, stats, tp, cads, &cleanup}
+	return &testPeer{pctx, s, ta, stats, tp, store, &cleanup}
 }
 
 func (m *testMocks) newPeers(n int, config Config) []*testPeer {

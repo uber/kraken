@@ -2,8 +2,10 @@ localdb:
   source: /var/cache/kraken/kraken-build-index/index.db
 
 store:
-  upload_dir: /var/cache/kraken/kraken-build-index/upload/
-  cache_dir: /var/cache/kraken/kraken-build-index/cache/
+  capacity: 4096 # number of tags, NOT bytes
+  root_dir: /var/cache/kraken/kraken-build-index/cache/
+  reboot_incomplete_blobs: false
+  shard_length: 0
 
 tag_store:
   write_through: true

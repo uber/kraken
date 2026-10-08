@@ -14,6 +14,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -57,6 +58,11 @@ func (e *Error) Header(k, v string) *Error {
 // GetStatus returns the error status.
 func (e *Error) GetStatus() int {
 	return e.status
+}
+
+func IsStatus(err error, status int) bool {
+	var e *Error
+	return errors.As(err, &e) && e.GetStatus() == status
 }
 
 func (e *Error) Error() string {

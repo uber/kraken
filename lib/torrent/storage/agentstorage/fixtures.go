@@ -14,46 +14,32 @@
 package agentstorage
 
 import (
-	"fmt"
+	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/tracker/metainfoclient"
-	"github.com/uber/kraken/utils/testutil"
 )
 
 // TorrentArchiveFixture returns a TorrrentArchive for testing purposes.
-func TorrentArchiveFixture() (*TorrentArchive, func()) {
-	cads, cleanup := store.CADownloadStoreFixture()
-	archive := NewTorrentArchive(tally.NoopScope, cads, nil)
-	return archive, cleanup
+func TorrentArchiveFixture(t *testing.T) *TorrentArchive {
+	return NewTorrentArchive(tally.NoopScope, disk.Fixture(t), nil)
 }
 
 // TorrentFixture returns a Torrent for the given metainfo for testing purposes.
-func TorrentFixture(mi *core.MetaInfo) (*Torrent, func()) {
-	var cleanup testutil.Cleanup
-	defer cleanup.Recover()
-
-	cads, c := store.CADownloadStoreFixture()
-	cleanup.Add(c)
-
+func TorrentFixture(t *testing.T, mi *core.MetaInfo) *Torrent {
 	tc := metainfoclient.NewTestClient()
 
-	ta := NewTorrentArchive(tally.NoopScope, cads, tc)
+	ta := NewTorrentArchive(tally.NoopScope, disk.Fixture(t), tc)
 
-	if err := tc.Upload(mi); err != nil {
-		panic(err)
-	}
+	require.NoError(t, tc.Upload(mi))
 
-	t, err := ta.CreateTorrent("noexist", mi.Digest())
-	if err != nil {
-		panic(err)
-	}
+	tor, err := ta.CreateTorrent("noexist", mi.Digest())
+	require.NoError(t, err)
 
-	torrent, ok := t.(*Torrent)
-	if !ok {
-		panic(fmt.Sprintf("expected *Torrent, got %T", t))
-	}
-	return torrent, cleanup.Run
+	torrent, ok := tor.(*Torrent)
+	require.True(t, ok)
+	return torrent
 }

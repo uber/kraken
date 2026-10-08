@@ -18,30 +18,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/uber/kraken/utils/closers"
 
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
-	"github.com/uber/kraken/lib/store"
 
 	storagedriver "github.com/docker/distribution/registry/storage/driver"
 )
 
-// BlobStore defines cache file accessors.
-type BlobStore interface {
-	GetCacheFileStat(name string) (os.FileInfo, error)
-	GetCacheFileReader(name string) (store.FileReader, error)
-}
-
 type blobs struct {
-	bs         BlobStore
 	transferer transfer.ImageTransferer
 }
 
-func newBlobs(bs BlobStore, transferer transfer.ImageTransferer) *blobs {
-	return &blobs{bs, transferer}
+func newBlobs(transferer transfer.ImageTransferer) *blobs {
+	return &blobs{transferer}
 }
 
 // getDigest returns blob digest given a blob path.

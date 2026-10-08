@@ -14,13 +14,12 @@
 package originstorage
 
 import (
-	"bytes"
 	"io"
 	"sync"
 	"testing"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/tiered"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
 	"github.com/uber/kraken/utils/bitsetutil"
 
@@ -30,15 +29,19 @@ import (
 func TestTorrentCreate(t *testing.T) {
 	require := require.New(t)
 
-	cas, cleanup := store.CAStoreFixture()
-	defer cleanup()
+	tieredStore, _ := tiered.StoreFixture(t)
 
 	blob := core.SizedBlobFixture(7, 2)
 	mi := blob.MetaInfo
 
-	require.NoError(cas.CreateCacheFile(mi.Digest().Hex(), bytes.NewReader(blob.Content)))
+	f, err := tieredStore.Create(mi.Digest().Hex(), uint64(len(blob.Content)))
+	require.NoError(err)
+	_, err = f.Write(blob.Content)
+	require.NoError(err)
+	require.NoError(f.Close())
+	require.NoError(tieredStore.MarkComplete(mi.Digest().Hex()))
 
-	tor, err := NewTorrent(cas, mi)
+	tor, err := NewTorrent(tieredStore, mi)
 	require.NoError(err)
 
 	// New torrent
@@ -58,15 +61,19 @@ func TestTorrentCreate(t *testing.T) {
 func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 	require := require.New(t)
 
-	cas, cleanup := store.CAStoreFixture()
-	defer cleanup()
+	tieredStore, _ := tiered.StoreFixture(t)
 
 	blob := core.SizedBlobFixture(7, 2)
 	mi := blob.MetaInfo
 
-	require.NoError(cas.CreateCacheFile(mi.Digest().Hex(), bytes.NewReader(blob.Content)))
+	f, err := tieredStore.Create(mi.Digest().Hex(), uint64(len(blob.Content)))
+	require.NoError(err)
+	_, err = f.Write(blob.Content)
+	require.NoError(err)
+	require.NoError(f.Close())
+	require.NoError(tieredStore.MarkComplete(mi.Digest().Hex()))
 
-	tor, err := NewTorrent(cas, mi)
+	tor, err := NewTorrent(tieredStore, mi)
 	require.NoError(err)
 
 	wg := sync.WaitGroup{}
@@ -93,15 +100,19 @@ func TestTorrentGetPieceReaderConcurrent(t *testing.T) {
 func TestTorrentWritePieceError(t *testing.T) {
 	require := require.New(t)
 
-	cas, cleanup := store.CAStoreFixture()
-	defer cleanup()
+	tieredStore, _ := tiered.StoreFixture(t)
 
 	blob := core.SizedBlobFixture(7, 2)
 	mi := blob.MetaInfo
 
-	require.NoError(cas.CreateCacheFile(mi.Digest().Hex(), bytes.NewReader(blob.Content)))
+	f, err := tieredStore.Create(mi.Digest().Hex(), uint64(len(blob.Content)))
+	require.NoError(err)
+	_, err = f.Write(blob.Content)
+	require.NoError(err)
+	require.NoError(f.Close())
+	require.NoError(tieredStore.MarkComplete(mi.Digest().Hex()))
 
-	tor, err := NewTorrent(cas, mi)
+	tor, err := NewTorrent(tieredStore, mi)
 	require.NoError(err)
 
 	err = tor.WritePiece(piecereader.NewBuffer([]byte{}), 0)

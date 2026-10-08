@@ -15,6 +15,7 @@ package base
 
 import (
 	"container/list"
+	"errors"
 	"os"
 	"sync"
 	"time"
@@ -251,7 +252,7 @@ func (fm *lruFileMap) TryStore(name string, entry FileEntry, f func(string, File
 	lat := metadata.NewLastAccessTime(fm.clk.Now())
 	if err := e.fe.GetMetadata(lat); err != nil {
 		// Set LAT if it doesn't exist on disk or cannot be read.
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			log.With("name", e.fe.GetName()).Errorf("Error reading LAT: %s", err)
 		}
 		if _, err := e.fe.SetMetadata(lat); err != nil {

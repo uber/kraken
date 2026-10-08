@@ -17,14 +17,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/uber/kraken/core"
-	"github.com/uber/kraken/lib/store"
+	storelib "github.com/uber/kraken/lib/store"
+	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
 	"github.com/uber/kraken/utils/closers"
-	"github.com/uber/kraken/utils/log"
 
 	"github.com/willf/bitset"
 	"go.uber.org/atomic"
@@ -35,45 +34,35 @@ var (
 	errWritePieceConflict = errors.New("piece is already being written to")
 )
 
-// caDownloadStore defines the CADownloadStore methods which Torrent requires. Useful
-// for testing purposes, where we need to mock certain methods.
-type caDownloadStore interface {
-	MoveDownloadFileToCache(name string) error
-	GetDownloadFileReadWriter(name string) (store.FileReadWriter, error)
-	Any() *store.CADownloadStoreScope
-	Download() *store.CADownloadStoreScope
-	InCacheError(error) bool
-}
-
 // Torrent implements a Torrent on top of an AgentFileStore.
 // It Allows concurrent writes on distinct pieces, and concurrent reads on all
 // pieces. Behavior is undefined if multiple Torrent instances are backed
 // by the same file store and metainfo.
 type Torrent struct {
 	metaInfo    *core.MetaInfo
-	cads        caDownloadStore
+	store       *disk.Store
 	pieces      []*piece
 	numComplete *atomic.Int32
 	committed   *atomic.Bool
 }
 
 // NewTorrent creates a new Torrent.
-func NewTorrent(cads caDownloadStore, mi *core.MetaInfo) (*Torrent, error) {
-	pieces, numComplete, err := restorePieces(mi.Digest(), cads, mi.NumPieces())
+func NewTorrent(store *disk.Store, mi *core.MetaInfo) (*Torrent, error) {
+	pieces, numComplete, err := restorePieces(mi.Digest(), store, mi.NumPieces())
 	if err != nil {
 		return nil, fmt.Errorf("restore pieces: %s", err)
 	}
 
 	committed := false
 	if numComplete == len(pieces) {
-		if err := cads.MoveDownloadFileToCache(mi.Digest().Hex()); err != nil && !os.IsExist(err) {
+		if err := store.MarkComplete(mi.Digest().Hex()); err != nil {
 			return nil, fmt.Errorf("move file to cache: %s", err)
 		}
 		committed = true
 	}
 
 	return &Torrent{
-		cads:        cads,
+		store:       store,
 		metaInfo:    mi,
 		pieces:      pieces,
 		numComplete: atomic.NewInt32(int32(numComplete)),
@@ -156,16 +145,9 @@ func (t *Torrent) getPiece(pi int) (*piece, error) {
 
 // markPieceComplete must only be called once per piece.
 func (t *Torrent) markPieceComplete(pi int) error {
-	updated, err := t.cads.Download().SetMetadataAt(
-		t.Digest().Hex(), &pieceStatusMetadata{}, []byte{byte(_complete)}, int64(pi))
-	if err != nil {
+	if err := t.store.ScopeIncomplete().WriteAtMetadata(
+		t.Digest().Hex(), &pieceStatusMetadata{}, []byte{byte(_complete)}, int64(pi)); err != nil {
 		return fmt.Errorf("write piece metadata: %s", err)
-	}
-	if !updated {
-		// This could mean there's another thread with a Torrent instance using
-		// the same file as us.
-		log.Errorf(
-			"Invariant violation: piece marked complete twice: piece %d in %s", pi, t.Digest().Hex())
 	}
 	t.pieces[pi].markComplete()
 	t.numComplete.Inc()
@@ -174,7 +156,7 @@ func (t *Torrent) markPieceComplete(pi int) error {
 
 // writePiece writes data to piece pi. If the write succeeds, marks the piece as completed.
 func (t *Torrent) writePiece(src storage.PieceReader, pi int) error {
-	f, err := t.cads.GetDownloadFileReadWriter(t.metaInfo.Digest().Hex())
+	f, err := t.store.ScopeIncomplete().Open(t.metaInfo.Digest().Hex())
 	if err != nil {
 		return fmt.Errorf("get download writer: %s", err)
 	}
@@ -236,12 +218,10 @@ func (t *Torrent) WritePiece(src storage.PieceReader, pi int) error {
 	}
 
 	if int(t.numComplete.Load()) == len(t.pieces) {
-		// Multiple threads may attempt to move the download file to cache, however
-		// only one will succeed while the others will receive (and ignore) file exist
-		// error.
-		err := t.cads.MoveDownloadFileToCache(t.metaInfo.Digest().Hex())
-		if err != nil && !os.IsExist(err) {
-			return fmt.Errorf("download completed but failed to move file to cache directory: %s", err)
+		// MarkComplete is idempotent, so concurrent threads racing to complete the
+		// download file may all call it safely.
+		if err := t.store.MarkComplete(t.metaInfo.Digest().Hex()); err != nil {
+			return fmt.Errorf("download completed but failed to mark file as complete: %s", err)
 		}
 		t.committed.Store(true)
 	}
@@ -253,8 +233,8 @@ type opener struct {
 	torrent *Torrent
 }
 
-func (o *opener) Open() (store.FileReader, error) {
-	return o.torrent.cads.Any().GetFileReader(o.torrent.Digest().Hex())
+func (o *opener) Open() (storelib.FileReader, error) {
+	return o.torrent.store.Open(o.torrent.Digest().Hex())
 }
 
 // GetPieceReader returns a reader for piece pi.

@@ -14,6 +14,7 @@
 package store
 
 import (
+	"errors"
 	"os"
 	"sync"
 	"testing"
@@ -46,6 +47,6 @@ func TestCADownloadStoreDownloadAndDeleteFiles(t *testing.T) {
 
 	for _, name := range names {
 		_, err := s.Cache().GetFileStat(name)
-		require.True(os.IsNotExist(err))
+		require.True(errors.Is(err, os.ErrNotExist))
 	}
 }

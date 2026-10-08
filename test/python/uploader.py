@@ -23,9 +23,9 @@ class Uploader(object):
     def __init__(self, addr):
         self.addr = addr
 
-    def _start(self, name):
-        url = 'https://{addr}/namespace/testfs/blobs/sha256:{name}/uploads'.format(
-            addr=self.addr, name=name)
+    def _start(self, name, size):
+        url = 'https://{addr}/namespace/testfs/blobs/sha256:{name}/uploads?size={size}'.format(
+            addr=self.addr, name=name, size=size)
         res = requests.post(url, **tls_opts_with_client_certs())
         res.raise_for_status()
         return res.headers['Location']
@@ -43,6 +43,6 @@ class Uploader(object):
         res.raise_for_status()
 
     def upload(self, name, blob):
-        uid = self._start(name)
+        uid = self._start(name, len(blob))
         self._patch(name, uid, 0, len(blob), blob)
         self._commit(name, uid)
