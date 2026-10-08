@@ -153,7 +153,7 @@ func NewReadWriteStorageDriver(
 		transferer: transferer,
 		blobs:      newBlobs(cas, transferer),
 		uploads:    newCASUploads(cas, transferer),
-		manifests:  newManifests(transferer, verification),
+		manifests:  newManifests(transferer, verification, config.EnforceSignatureVerification),
 	}
 }
 
@@ -168,7 +168,7 @@ func NewReadOnlyStorageDriver(
 		transferer: transferer,
 		blobs:      newBlobs(bs, transferer),
 		uploads:    disabledUploads{},
-		manifests:  newManifests(transferer, verification),
+		manifests:  newManifests(transferer, verification, config.EnforceSignatureVerification),
 	}
 }
 

@@ -37,17 +37,20 @@ const (
 )
 
 type manifests struct {
-	transferer   transfer.ImageTransferer
-	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)
+	transferer          transfer.ImageTransferer
+	verification        func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error)
+	enforceVerification bool
 }
 
 func newManifests(
 	transferer transfer.ImageTransferer,
 	verification func(repo string, digest core.Digest, blob store.FileReader) (SignatureVerificationDecision, error),
+	enforceVerification bool,
 ) *manifests {
 	return &manifests{
-		transferer:   transferer,
-		verification: verification,
+		transferer:          transferer,
+		verification:        verification,
+		enforceVerification: enforceVerification,
 	}
 }
 
@@ -59,8 +62,9 @@ func newManifests(
 //  2. If subtype is tags, resolves the tag to a digest using the transferer;
 //     if subtype is revisions, parses the digest directly from the path.
 //  3. Downloads the manifest blob via the transferer using (repo, digest).
-//  4. Opportunistically invokes verify to run signature/image checks and
-//     record logs. Verification result is not enforced here.
+//  4. Invokes verifySignature to run signature/image checks.
+//     If EnforceSignatureVerification is set, a deny decision or
+//     verification error fails the request.
 //  5. Returns the digest in ASCII string form as a byte slice.
 //
 // Notes
@@ -101,16 +105,20 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 	}
 	defer closers.Close(blob)
 
-	// Signature verification is currently not enforced: errors from t.verify are ignored.
-	// This is intentional because verification enforcement is planned for a future release.
-	// Risks: manifests may be accepted without verification, which could allow untrusted content.
-	// TODO: Remove error ignoring and enforce verification once the feature is activated.
-	_, _ = t.verify(path, repo, digest, blob) //nolint:errcheck
+	allowed, err := t.verifySignature(path, repo, digest, blob)
+	if t.enforceVerification {
+		if err != nil {
+			return nil, fmt.Errorf("verify signature: %w", err)
+		}
+		if !allowed {
+			return nil, fmt.Errorf("verify signature: denied %s", digest)
+		}
+	}
 	return []byte(digest.String()), nil
 }
 
-// verify runs signature/image verification for a downloaded manifest blob and
-// logs around the decision.
+// verifySignature runs signature/image verification for a downloaded
+// manifest blob and logs around the decision.
 //
 // Returns
 //   - (true, nil)  when verification is allowed or intentionally skipped.
@@ -121,7 +129,7 @@ func (t *manifests) getDigest(path string, subtype PathSubType) ([]byte, error) 
 //   - Error on verification error.
 //   - Warn  on deny.
 //   - Debug on skip.
-func (t *manifests) verify(
+func (t *manifests) verifySignature(
 	path string,
 	repo string,
 	digest core.Digest,
