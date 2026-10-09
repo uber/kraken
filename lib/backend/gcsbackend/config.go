@@ -15,7 +15,6 @@ package gcsbackend
 
 import (
 	"github.com/c2h5oh/datasize"
-
 	"github.com/uber/kraken/lib/backend"
 )
 
@@ -38,6 +37,18 @@ type Config struct {
 
 	// NamePath identifies which namepath.Pather to use.
 	NamePath string `yaml:"name_path"`
+
+	// DownloadConcurrency specifies the max parallel downloads.
+	DownloadConcurrency int `yaml:"download_concurrency"`
+
+	// DownloadPartSize is passed to [transfermanager.WithPartSize].
+	DownloadPartSize int64 `yaml:"download_part_size"`
+
+	// PrivateServiceConnect is an optional private service connect endpoint for download/upload.
+	PrivateServiceConnect string `yaml:"private_service_connect"`
+
+	// DownloadTimeoutSeconds specifies the timeout for each download request.
+	DownloadTimeoutSeconds int `yaml:"download_timeout_secs"`
 }
 
 // UserAuthConfig defines authentication configuration overlayed by Langley.
@@ -46,9 +57,12 @@ type UserAuthConfig map[string]AuthConfig
 
 // AuthConfig matches Langley format.
 type AuthConfig struct {
-	GCS struct {
-		AccessBlob string `yaml:"access_blob"`
-	} `yaml:"gcs"`
+	GCS GCSConfig `yaml:"gcs"`
+}
+
+// GCSConfig defines the GCS specific authentication parameters.
+type GCSConfig struct {
+	AccessBlob string `yaml:"access_blob"`
 }
 
 func (c *Config) applyDefaults() {
@@ -60,5 +74,14 @@ func (c *Config) applyDefaults() {
 	}
 	if c.ListMaxKeys == 0 {
 		c.ListMaxKeys = backend.DefaultListMaxKeys
+	}
+	if c.DownloadConcurrency == 0 {
+		c.DownloadConcurrency = backend.DefaultConcurrency
+	}
+	if c.DownloadPartSize == 0 {
+		c.DownloadPartSize = backend.DefaultPartSize
+	}
+	if c.DownloadTimeoutSeconds == 0 {
+		c.DownloadTimeoutSeconds = 600
 	}
 }
