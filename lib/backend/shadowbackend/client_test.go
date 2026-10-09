@@ -234,14 +234,16 @@ func TestGetBackendClient(t *testing.T) {
 			cfg: map[string]interface{}{
 				"i_am_a_banana": backend.Config{},
 			},
-			expectedErr: "unsupported backend type 'i_am_a_banana'",
+			expectedErr: "no backend client defined with name i_am_a_banana",
 		},
 	}
 
 	for testName, tt := range testCases {
 		t.Run(testName, func(t *testing.T) {
 
-			client, err := getBackendClient(tt.cfg, tt.authCfg, tally.NoopScope)
+			client, err := getBackendClient(
+				tt.cfg, backend.AuthConfig{backendName(tt.cfg): tt.authCfg},
+				tally.NoopScope, zap.NewNop().Sugar())
 
 			if tt.expectedErr != "" {
 				assert.EqualError(t, err, tt.expectedErr)
@@ -494,4 +496,73 @@ func TestListActiveFailure(t *testing.T) {
 	res, err := client.List("prefix")
 	assert.EqualError(t, err, "expected error")
 	assert.Nil(t, res)
+}
+
+type clientFactoryFunc func(
+	interface{}, backend.AuthConfig, tally.Scope, *zap.SugaredLogger) (backend.Client, error)
+
+func (f clientFactoryFunc) Create(
+	config interface{}, auth backend.AuthConfig, stats tally.Scope,
+	logger *zap.SugaredLogger) (backend.Client, error) {
+	return f(config, auth, stats, logger)
+}
+
+func TestClientFactoryUsesRegisteredBackends(t *testing.T) {
+	mocks, finish := newClientMocks(t)
+	defer finish()
+	activeName, shadowName := t.Name()+"-active", t.Name()+"-shadow"
+	stats := tally.NewTestScope("test", nil)
+	logger := zap.NewNop().Sugar()
+	auth := backend.AuthConfig{activeName: "active-token", shadowName: "shadow-token"}
+	calls := 0
+	backend.Register(activeName, clientFactoryFunc(func(
+		config interface{}, gotAuth backend.AuthConfig, gotStats tally.Scope,
+		gotLogger *zap.SugaredLogger) (backend.Client, error) {
+		calls++
+		require.Equal(t, "active-config", config)
+		require.Equal(t, auth, gotAuth)
+		require.Same(t, stats, gotStats)
+		require.Same(t, logger, gotLogger)
+		return mocks.mockActive, nil
+	}))
+	backend.Register(shadowName, clientFactoryFunc(func(
+		config interface{}, gotAuth backend.AuthConfig, gotStats tally.Scope,
+		gotLogger *zap.SugaredLogger) (backend.Client, error) {
+		calls++
+		require.Equal(t, "shadow-config", config)
+		require.Equal(t, auth, gotAuth)
+		require.Same(t, stats, gotStats)
+		require.Same(t, logger, gotLogger)
+		return mocks.mockShadow, nil
+	}))
+	config := Config{
+		ActiveClientConfig: map[string]interface{}{activeName: "active-config"},
+		ShadowClientConfig: map[string]interface{}{shadowName: "shadow-config"},
+	}
+	f := factory{}
+	client, err := f.Create(config, auth, stats, logger)
+	require.NoError(t, err)
+	require.Equal(t, 2, calls)
+	setupCloseExpectations(mocks)
+	require.NoError(t, client.Close())
+}
+
+func TestGetBackendClientFactoryError(t *testing.T) {
+	name := t.Name()
+	wantErr := errors.New("cannot create backend")
+	backend.Register(name, clientFactoryFunc(func(
+		interface{}, backend.AuthConfig, tally.Scope, *zap.SugaredLogger) (backend.Client, error) {
+		return nil, wantErr
+	}))
+	client, err := getBackendClient(
+		map[string]interface{}{name: "config"}, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.ErrorIs(t, err, wantErr)
+	require.Nil(t, client)
+}
+
+func backendName(config map[string]interface{}) string {
+	for name := range config {
+		return name
+	}
+	return ""
 }
