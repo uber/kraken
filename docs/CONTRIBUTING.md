@@ -23,7 +23,7 @@ If you are new to Kraken, have a look at our [good first issues](https://github.
 Most tests and scripts assumes the developer to have Docker installed locally.
 To install dependencies:
 ```
-$ make vendor
+$ go mod download
 ```
 To run unit tests:
 ```
