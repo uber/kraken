@@ -11,7 +11,7 @@ Kraken is a P2P-powered Docker registry designed for scalability and availabilit
 ### Build & Test
 ```bash
 # Install dependencies
-make vendor
+go mod download
 
 # Build all binaries (uses Docker for cross-compilation on macOS)
 make bins
