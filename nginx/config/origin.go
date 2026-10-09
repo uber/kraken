@@ -26,7 +26,7 @@ server {
   error_log {{.error_log_path}};
 
   gzip on;
-  gzip_types text/plain test/csv application/json;
+  gzip_types text/plain text/csv application/json;
 
   # Committing large blobs might take a while.
   proxy_read_timeout {{if .proxy_read_timeout}}{{.proxy_read_timeout}}{{else}}3m{{end}};
