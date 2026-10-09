@@ -22,10 +22,10 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
-	"github.com/uber/kraken/lib/backend/hdfsbackend"
-	"github.com/uber/kraken/lib/backend/s3backend"
-	"github.com/uber/kraken/lib/backend/sqlbackend"
-	"github.com/uber/kraken/lib/backend/testfs"
+	_ "github.com/uber/kraken/lib/backend/hdfsbackend"
+	_ "github.com/uber/kraken/lib/backend/s3backend"
+	_ "github.com/uber/kraken/lib/backend/sqlbackend"
+	_ "github.com/uber/kraken/lib/backend/testfs"
 	"github.com/uber/kraken/utils/log"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -44,7 +44,8 @@ func (f *factory) Name() string {
 }
 
 func (f *factory) Create(
-	confRaw interface{}, masterAuthConfig backend.AuthConfig, stats tally.Scope, _ *zap.SugaredLogger) (backend.Client, error) {
+	confRaw interface{}, masterAuthConfig backend.AuthConfig,
+	stats tally.Scope, logger *zap.SugaredLogger) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -55,7 +56,7 @@ func (f *factory) Create(
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
 		return nil, fmt.Errorf("unmarshal shadow config: %v", err)
 	}
-	return NewClient(config, masterAuthConfig, stats)
+	return newClientWithLogger(config, masterAuthConfig, stats, logger)
 }
 
 // Client implements a backend.Client for shadow mode. See the README for full details on what shadow mode means.
@@ -71,16 +72,21 @@ type Option func(*Client)
 
 // NewClient creates a new shadow Client
 func NewClient(config Config, masterAuthConfig backend.AuthConfig, stats tally.Scope) (*Client, error) {
-	aAuthConfig, sAuthConfig, err := extractAuthConfigs(config, masterAuthConfig)
-	if err != nil {
+	return newClientWithLogger(config, masterAuthConfig, stats, log.Default())
+}
+
+func newClientWithLogger(
+	config Config, masterAuthConfig backend.AuthConfig, stats tally.Scope,
+	logger *zap.SugaredLogger) (*Client, error) {
+	if err := validateAuthConfigs(config, masterAuthConfig); err != nil {
 		return nil, err
 	}
-	a, err := getBackendClient(config.ActiveClientConfig, aAuthConfig, stats)
+	a, err := getBackendClient(config.ActiveClientConfig, masterAuthConfig, stats, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := getBackendClient(config.ShadowClientConfig, sAuthConfig, stats)
+	s, err := getBackendClient(config.ShadowClientConfig, masterAuthConfig, stats, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -93,21 +99,18 @@ func NewClient(config Config, masterAuthConfig backend.AuthConfig, stats tally.S
 	}, nil
 }
 
-func extractAuthConfigs(config Config, masterAuthConfig backend.AuthConfig) (interface{}, interface{}, error) {
+func validateAuthConfigs(config Config, masterAuthConfig backend.AuthConfig) error {
 	aName, sName, err := getBackendNames(config)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-
-	aAuth, ok := masterAuthConfig[aName]
-	if !ok {
-		return nil, nil, fmt.Errorf("active backend auth config missing")
+	if _, ok := masterAuthConfig[aName]; !ok {
+		return fmt.Errorf("active backend auth config missing")
 	}
-	sAuth, ok := masterAuthConfig[sName]
-	if !ok {
-		return nil, nil, fmt.Errorf("shadow backend auth config missing")
+	if _, ok := masterAuthConfig[sName]; !ok {
+		return fmt.Errorf("shadow backend auth config missing")
 	}
-	return aAuth, sAuth, nil
+	return nil
 }
 
 func getBackendNames(config Config) (string, string, error) {
@@ -126,81 +129,16 @@ func getBackendNames(config Config) (string, string, error) {
 	return aName, sName, nil
 }
 
-func getBackendClient(backendConfig map[string]interface{}, authConfRaw interface{}, stats tally.Scope) (backend.Client, error) {
-	var name string
-	var confRaw interface{}
-
-	// TODO Re-implementing all the factory functions is bad form, but because backends.getFactory isn't public there
-	// is no way to access them currently. Opened https://github.com/uber/kraken/issues/213 to address this.
-	for name, confRaw = range backendConfig {
-		switch name {
-		case "sql":
-			confBytes, err := yaml.Marshal(confRaw)
-			if err != nil {
-				return nil, fmt.Errorf("marshal sql config: %s", err)
-			}
-			var config sqlbackend.Config
-			if err := yaml.Unmarshal(confBytes, &config); err != nil {
-				return nil, fmt.Errorf("unmarshal sql config: %s", err)
-			}
-			authConfBytes, err := yaml.Marshal(authConfRaw)
-			if err != nil {
-				return nil, fmt.Errorf("marshal sql auth config: %s", err)
-			}
-			var userAuth sqlbackend.UserAuthConfig
-			if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
-				return nil, fmt.Errorf("unmarshal sql auth config: %s", err)
-			}
-			return sqlbackend.NewClient(config, userAuth, stats)
-		case "hdfs":
-			confBytes, err := yaml.Marshal(confRaw)
-			if err != nil {
-				return nil, fmt.Errorf("marshal hdfs config: %s", err)
-			}
-
-			var config hdfsbackend.Config
-			if err := yaml.Unmarshal(confBytes, &config); err != nil {
-				return nil, fmt.Errorf("unmarshal hdfs config: %s", err)
-			}
-
-			return hdfsbackend.NewClient(config, stats)
-		case "s3":
-			confBytes, err := yaml.Marshal(confRaw)
-			if err != nil {
-				return nil, fmt.Errorf("marshal s3 config: %s", err)
-			}
-
-			var config s3backend.Config
-			if err := yaml.Unmarshal(confBytes, &config); err != nil {
-				return nil, fmt.Errorf("unmarshal s3 config: %s", err)
-			}
-			authConfBytes, err := yaml.Marshal(authConfRaw)
-			if err != nil {
-				return nil, fmt.Errorf("marshal s3 auth config: %s", err)
-			}
-			var userAuth s3backend.UserAuthConfig
-			if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
-				return nil, fmt.Errorf("unmarshal s3 auth config: %s", err)
-			}
-
-			return s3backend.NewClient(config, userAuth, stats)
-		case "testfs":
-			confBytes, err := yaml.Marshal(confRaw)
-			if err != nil {
-				return nil, fmt.Errorf("marshal testfs config: %s", err)
-			}
-
-			var config testfs.Config
-			if err := yaml.Unmarshal(confBytes, &config); err != nil {
-				return nil, fmt.Errorf("unmarshal testfs config: %s", err)
-			}
-
-			return testfs.NewClient(config, stats)
-		default:
-			return nil, fmt.Errorf("unsupported backend type '%s'", name)
+func getBackendClient(
+	backendConfig map[string]interface{}, authConfig backend.AuthConfig, stats tally.Scope,
+	logger *zap.SugaredLogger) (backend.Client, error) {
+	for name, confRaw := range backendConfig {
+		factory, err := backend.GetFactory(name)
+		if err != nil {
+			return nil, err
 		}
+		return factory.Create(confRaw, authConfig, stats, logger)
 	}
-
 	return nil, nil
 }
 
