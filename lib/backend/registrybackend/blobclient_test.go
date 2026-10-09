@@ -15,6 +15,7 @@ package registrybackend
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -39,6 +40,19 @@ func TestClientFactory(t *testing.T) {
 	f := blobClientFactory{}
 	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
+}
+
+func TestClientFactoryConfigError(t *testing.T) {
+	require := require.New(t)
+
+	// A sequence cannot be unmarshaled into Config.Address, so the factory must
+	// name the registry blob backend and keep the underlying error.
+	config := map[string]interface{}{"address": []string{"registry.internal"}}
+	f := blobClientFactory{}
+	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(err)
+	require.Contains(err.Error(), "unmarshal registry blob config")
+	require.NotNil(errors.Unwrap(err))
 }
 
 func TestBlobDownloadBlobSuccess(t *testing.T) {
