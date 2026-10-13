@@ -242,8 +242,11 @@ func TestGetBackendClient(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 
 			client, err := getBackendClient(
-				tt.cfg, backend.AuthConfig{backendName(tt.cfg): tt.authCfg},
-				tally.NoopScope, zap.NewNop().Sugar())
+				tt.cfg,
+				backend.AuthConfig{backendName(tt.cfg): tt.authCfg},
+				tally.NoopScope,
+				zap.NewNop().Sugar(),
+			)
 
 			if tt.expectedErr != "" {
 				assert.EqualError(t, err, tt.expectedErr)
@@ -499,11 +502,18 @@ func TestListActiveFailure(t *testing.T) {
 }
 
 type clientFactoryFunc func(
-	interface{}, backend.AuthConfig, tally.Scope, *zap.SugaredLogger) (backend.Client, error)
+	interface{},
+	backend.AuthConfig,
+	tally.Scope,
+	*zap.SugaredLogger,
+) (backend.Client, error)
 
 func (f clientFactoryFunc) Create(
-	config interface{}, auth backend.AuthConfig, stats tally.Scope,
-	logger *zap.SugaredLogger) (backend.Client, error) {
+	config interface{},
+	auth backend.AuthConfig,
+	stats tally.Scope,
+	logger *zap.SugaredLogger,
+) (backend.Client, error) {
 	return f(config, auth, stats, logger)
 }
 
@@ -516,8 +526,11 @@ func TestClientFactoryUsesRegisteredBackends(t *testing.T) {
 	auth := backend.AuthConfig{activeName: "active-token", shadowName: "shadow-token"}
 	calls := 0
 	backend.Register(activeName, clientFactoryFunc(func(
-		config interface{}, gotAuth backend.AuthConfig, gotStats tally.Scope,
-		gotLogger *zap.SugaredLogger) (backend.Client, error) {
+		config interface{},
+		gotAuth backend.AuthConfig,
+		gotStats tally.Scope,
+		gotLogger *zap.SugaredLogger,
+	) (backend.Client, error) {
 		calls++
 		require.Equal(t, "active-config", config)
 		require.Equal(t, auth, gotAuth)
@@ -526,8 +539,11 @@ func TestClientFactoryUsesRegisteredBackends(t *testing.T) {
 		return mocks.mockActive, nil
 	}))
 	backend.Register(shadowName, clientFactoryFunc(func(
-		config interface{}, gotAuth backend.AuthConfig, gotStats tally.Scope,
-		gotLogger *zap.SugaredLogger) (backend.Client, error) {
+		config interface{},
+		gotAuth backend.AuthConfig,
+		gotStats tally.Scope,
+		gotLogger *zap.SugaredLogger,
+	) (backend.Client, error) {
 		calls++
 		require.Equal(t, "shadow-config", config)
 		require.Equal(t, auth, gotAuth)
@@ -551,11 +567,19 @@ func TestGetBackendClientFactoryError(t *testing.T) {
 	name := t.Name()
 	wantErr := errors.New("cannot create backend")
 	backend.Register(name, clientFactoryFunc(func(
-		interface{}, backend.AuthConfig, tally.Scope, *zap.SugaredLogger) (backend.Client, error) {
+		interface{},
+		backend.AuthConfig,
+		tally.Scope,
+		*zap.SugaredLogger,
+	) (backend.Client, error) {
 		return nil, wantErr
 	}))
 	client, err := getBackendClient(
-		map[string]interface{}{name: "config"}, nil, tally.NoopScope, zap.NewNop().Sugar())
+		map[string]interface{}{name: "config"},
+		nil,
+		tally.NoopScope,
+		zap.NewNop().Sugar(),
+	)
 	require.ErrorIs(t, err, wantErr)
 	require.Nil(t, client)
 }

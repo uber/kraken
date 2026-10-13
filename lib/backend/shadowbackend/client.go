@@ -22,13 +22,15 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
+	"github.com/uber/kraken/utils/log"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
+
+	// Register the built-in backend factories via their init functions.
 	_ "github.com/uber/kraken/lib/backend/hdfsbackend"
 	_ "github.com/uber/kraken/lib/backend/s3backend"
 	_ "github.com/uber/kraken/lib/backend/sqlbackend"
 	_ "github.com/uber/kraken/lib/backend/testfs"
-	"github.com/uber/kraken/utils/log"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 )
 
 const _shadow = "shadow"
@@ -44,8 +46,11 @@ func (f *factory) Name() string {
 }
 
 func (f *factory) Create(
-	confRaw interface{}, masterAuthConfig backend.AuthConfig,
-	stats tally.Scope, logger *zap.SugaredLogger) (backend.Client, error) {
+	confRaw interface{},
+	masterAuthConfig backend.AuthConfig,
+	stats tally.Scope,
+	logger *zap.SugaredLogger,
+) (backend.Client, error) {
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
@@ -76,8 +81,11 @@ func NewClient(config Config, masterAuthConfig backend.AuthConfig, stats tally.S
 }
 
 func newClientWithLogger(
-	config Config, masterAuthConfig backend.AuthConfig, stats tally.Scope,
-	logger *zap.SugaredLogger) (*Client, error) {
+	config Config,
+	masterAuthConfig backend.AuthConfig,
+	stats tally.Scope,
+	logger *zap.SugaredLogger,
+) (*Client, error) {
 	if err := validateAuthConfigs(config, masterAuthConfig); err != nil {
 		return nil, err
 	}
@@ -130,14 +138,17 @@ func getBackendNames(config Config) (string, string, error) {
 }
 
 func getBackendClient(
-	backendConfig map[string]interface{}, authConfig backend.AuthConfig, stats tally.Scope,
-	logger *zap.SugaredLogger) (backend.Client, error) {
+	backendConfig map[string]interface{},
+	authConfig backend.AuthConfig,
+	stats tally.Scope,
+	logger *zap.SugaredLogger,
+) (backend.Client, error) {
 	for name, confRaw := range backendConfig {
-		factory, err := backend.GetFactory(name)
+		backendFactory, err := backend.GetFactory(name)
 		if err != nil {
 			return nil, err
 		}
-		return factory.Create(confRaw, authConfig, stats, logger)
+		return backendFactory.Create(confRaw, authConfig, stats, logger)
 	}
 	return nil, nil
 }
