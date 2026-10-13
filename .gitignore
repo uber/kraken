@@ -49,6 +49,7 @@ config/*/test*.yaml
 
 # For vim users.
 tags
+*.sw?
 
 # For engdoc.
 .DS_Store
