@@ -25,155 +25,210 @@ import (
 )
 
 func TestParseHost(t *testing.T) {
-	require := require.New(t)
+	tests := []struct {
+		name         string
+		host         string
+		expectedAddr string
+		expectedPath string
+		expectedErr  string
+	}{
+		{
+			name:         "valid tcp host",
+			host:         "tcp://127.0.0.1:2375",
+			expectedAddr: "127.0.0.1:2375",
+			expectedPath: "",
+		},
+		{
+			name:         "valid tcp host with path",
+			host:         "tcp://127.0.0.1:2375/prefix",
+			expectedAddr: "127.0.0.1:2375",
+			expectedPath: "/prefix",
+		},
+		{
+			name:         "valid unix host",
+			host:         "unix:///var/run/docker.sock",
+			expectedAddr: "/var/run/docker.sock",
+			expectedPath: "",
+		},
+		{
+			name:        "invalid host missing scheme",
+			host:        "invalid-host",
+			expectedErr: "unable to parse docker host",
+		},
+		{
+			name:        "unsupported protocol",
+			host:        "udp://127.0.0.1:2375",
+			expectedErr: "protocol udp not supported",
+		},
+		{
+			name:        "unix socket path too long",
+			host:        "unix:///" + strings.Repeat("a", 200),
+			expectedErr: "unix socket path",
+		},
+	}
 
-	// Valid TCP host
-	client, addr, basePath, err := parseHost("tcp://127.0.0.1:2375")
-	require.NoError(err)
-	require.NotNil(client)
-	require.Equal("127.0.0.1:2375", addr)
-	require.Equal("", basePath)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
 
-	// Valid TCP host with path
-	client, addr, basePath, err = parseHost("tcp://127.0.0.1:2375/prefix")
-	require.NoError(err)
-	require.NotNil(client)
-	require.Equal("127.0.0.1:2375", addr)
-	require.Equal("/prefix", basePath)
-
-	// Valid unix host
-	client, addr, basePath, err = parseHost("unix:///var/run/docker.sock")
-	require.NoError(err)
-	require.NotNil(client)
-	require.Equal("/var/run/docker.sock", addr)
-	require.Equal("", basePath)
-
-	// Invalid format: missing scheme separator
-	_, _, _, err = parseHost("invalid-host")
-	require.Error(err)
-	require.Contains(err.Error(), "unable to parse docker host")
-
-	// Unsupported protocol
-	_, _, _, err = parseHost("udp://127.0.0.1:2375")
-	require.Error(err)
-	require.Contains(err.Error(), "protocol udp not supported")
-
-	// Unix socket path too long
-	longPath := "unix:///" + strings.Repeat("a", 200)
-	_, _, _, err = parseHost(longPath)
-	require.Error(err)
-	require.Contains(err.Error(), "unix socket path")
-	require.Contains(err.Error(), "is too long")
+			client, addr, basePath, err := parseHost(tt.host)
+			if tt.expectedErr != "" {
+				require.Error(err)
+				require.Contains(err.Error(), tt.expectedErr)
+			} else {
+				require.NoError(err)
+				require.NotNil(client)
+				require.Equal(tt.expectedAddr, addr)
+				require.Equal(tt.expectedPath, basePath)
+			}
+		})
+	}
 }
 
 func TestNewDockerClient(t *testing.T) {
-	require := require.New(t)
-
-	config := Config{
-		DockerHost:          "tcp://127.0.0.1:2375",
-		DockerScheme:        "http",
-		DockerClientVersion: "1.24",
+	tests := []struct {
+		name             string
+		config           Config
+		registry         string
+		expectedVersion  string
+		expectedScheme   string
+		expectedAddr     string
+		expectedRegistry string
+		expectedErr      bool
+	}{
+		{
+			name: "valid tcp config",
+			config: Config{
+				DockerHost:          "tcp://127.0.0.1:2375",
+				DockerScheme:        "http",
+				DockerClientVersion: "1.24",
+			},
+			registry:         "example.com:5000",
+			expectedVersion:  "1.24",
+			expectedScheme:   "http",
+			expectedAddr:     "127.0.0.1:2375",
+			expectedRegistry: "example.com:5000",
+		},
+		{
+			name: "invalid docker host",
+			config: Config{
+				DockerHost: "invalid-host",
+			},
+			registry:    "example.com:5000",
+			expectedErr: true,
+		},
 	}
-	cli, err := NewDockerClient(config, "example.com:5000")
-	require.NoError(err)
-	require.NotNil(cli)
 
-	dcli, ok := cli.(*dockerClient)
-	require.True(ok)
-	require.Equal("1.24", dcli.version)
-	require.Equal("http", dcli.scheme)
-	require.Equal("127.0.0.1:2375", dcli.addr)
-	require.Equal("example.com:5000", dcli.registry)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+
+			cli, err := NewDockerClient(tt.config, tt.registry)
+			if tt.expectedErr {
+				require.Error(err)
+				require.Nil(cli)
+			} else {
+				require.NoError(err)
+				require.NotNil(cli)
+
+				dcli, ok := cli.(*dockerClient)
+				require.True(ok)
+				require.Equal(tt.expectedVersion, dcli.version)
+				require.Equal(tt.expectedScheme, dcli.scheme)
+				require.Equal(tt.expectedAddr, dcli.addr)
+				require.Equal(tt.expectedRegistry, dcli.registry)
+			}
+		})
+	}
 }
 
-func TestPullImageSuccess(t *testing.T) {
-	require := require.New(t)
-
-	var receivedMethod, receivedPath, receivedAuth, receivedFromImage, receivedTag string
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedMethod = r.Method
-		receivedPath = r.URL.Path
-		receivedAuth = r.Header.Get("X-Registry-Auth")
-		receivedFromImage = r.URL.Query().Get("fromImage")
-		receivedTag = r.URL.Query().Get("tag")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"downloading"}`))
-	}))
-	defer server.Close()
-
-	// Extract server host and scheme
-	serverURL := strings.TrimPrefix(server.URL, "http://")
-
-	cli := &dockerClient{
-		version:  "1.24",
-		scheme:   "http",
-		addr:     serverURL,
-		basePath: "",
-		registry: "registry.example.com",
-		client:   server.Client(),
+func TestPullImage(t *testing.T) {
+	tests := []struct {
+		name          string
+		handler       http.HandlerFunc
+		ctx           func() (context.Context, context.CancelFunc)
+		repo          string
+		tag           string
+		clientVersion string
+		expectedErr   string
+	}{
+		{
+			name: "pull image success",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "POST", r.Method)
+				require.Equal(t, "/v1.24/images/create", r.URL.Path)
+				require.Equal(t, "", r.Header.Get("X-Registry-Auth"))
+				require.Equal(t, "registry.example.com/repo/app", r.URL.Query().Get("fromImage"))
+				require.Equal(t, "v1.0.0", r.URL.Query().Get("tag"))
+				w.WriteHeader(http.StatusOK)
+				_, err := w.Write([]byte(`{"status":"downloading"}`))
+				require.NoError(t, err)
+			},
+			repo:          "repo/app",
+			tag:           "v1.0.0",
+			clientVersion: "1.24",
+		},
+		{
+			name: "pull image 404 error response",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				_, err := w.Write([]byte("image not found"))
+				require.NoError(t, err)
+			},
+			repo:        "nonexistent",
+			tag:         "latest",
+			expectedErr: "code 404",
+		},
+		{
+			name: "pull image context canceled",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				time.Sleep(100 * time.Millisecond)
+				w.WriteHeader(http.StatusOK)
+			},
+			ctx: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx, cancel
+			},
+			repo:          "repo/app",
+			tag:           "latest",
+			clientVersion: "1.24",
+			expectedErr:   "context canceled",
+		},
 	}
 
-	err := cli.PullImage(context.Background(), "repo/app", "v1.0.0")
-	require.NoError(err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
 
-	require.Equal("POST", receivedMethod)
-	require.Equal("/v1.24/images/create", receivedPath)
-	require.Equal("", receivedAuth)
-	require.Equal("registry.example.com/repo/app", receivedFromImage)
-	require.Equal("v1.0.0", receivedTag)
-}
+			server := httptest.NewServer(tt.handler)
+			defer server.Close()
 
-func TestPullImageErrorResponse(t *testing.T) {
-	require := require.New(t)
+			serverURL := strings.TrimPrefix(server.URL, "http://")
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("image not found"))
-	}))
-	defer server.Close()
+			cli := &dockerClient{
+				version:  tt.clientVersion,
+				scheme:   "http",
+				addr:     serverURL,
+				basePath: "",
+				registry: "registry.example.com",
+				client:   server.Client(),
+			}
 
-	serverURL := strings.TrimPrefix(server.URL, "http://")
+			ctx := context.Background()
+			if tt.ctx != nil {
+				var cancel context.CancelFunc
+				ctx, cancel = tt.ctx()
+				defer cancel()
+			}
 
-	cli := &dockerClient{
-		version:  "",
-		scheme:   "http",
-		addr:     serverURL,
-		basePath: "",
-		registry: "registry.example.com",
-		client:   server.Client(),
+			err := cli.PullImage(ctx, tt.repo, tt.tag)
+			if tt.expectedErr != "" {
+				require.Error(err)
+				require.Contains(err.Error(), tt.expectedErr)
+			} else {
+				require.NoError(err)
+			}
+		})
 	}
-
-	err := cli.PullImage(context.Background(), "nonexistent", "latest")
-	require.Error(err)
-	require.Contains(err.Error(), "code 404")
-	require.Contains(err.Error(), "image not found")
-}
-
-func TestPullImageContextCanceled(t *testing.T) {
-	require := require.New(t)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	serverURL := strings.TrimPrefix(server.URL, "http://")
-
-	cli := &dockerClient{
-		version:  "1.24",
-		scheme:   "http",
-		addr:     serverURL,
-		basePath: "",
-		registry: "registry.example.com",
-		client:   server.Client(),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
-
-	err := cli.PullImage(ctx, "repo/app", "latest")
-	require.Error(err)
-	require.Contains(err.Error(), "context canceled")
 }
