@@ -50,20 +50,20 @@ func (f *factory) Create(
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
-		return nil, errors.New("marshal s3 config")
+		return nil, fmt.Errorf("marshal s3 config: %w", err)
 	}
 	authConfBytes, err := yaml.Marshal(masterAuthConfig[_s3])
 	if err != nil {
-		return nil, errors.New("marshal s3 auth config")
+		return nil, fmt.Errorf("marshal s3 auth config: %w", err)
 	}
 
 	var config Config
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
-		return nil, errors.New("unmarshal s3 config")
+		return nil, fmt.Errorf("unmarshal s3 config: %w", err)
 	}
 	var userAuth UserAuthConfig
 	if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
-		return nil, errors.New("unmarshal s3 auth config")
+		return nil, fmt.Errorf("unmarshal s3 auth config: %w", err)
 	}
 
 	return NewClient(config, userAuth, stats)

@@ -15,6 +15,7 @@ package sqlbackend
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/closers"
 	"go.uber.org/zap"
@@ -52,6 +54,49 @@ func TestClientFactory(t *testing.T) {
 	f := factory{}
 	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(t, err)
+}
+
+func TestClientFactoryConfigError(t *testing.T) {
+	f := factory{}
+
+	// A config that cannot be marshaled, so the factory must name the sql backend
+	// and keep the underlying error.
+	_, err := f.Create(failingConfig{}, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "marshal sql config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	// A config that cannot be unmarshaled, so the factory must name the sql
+	// backend and keep the underlying error.
+	_, err = f.Create([]string{"not", "a", "mapping"}, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unmarshal sql config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	// The auth config is marshaled and unmarshaled separately, so those two
+	// failures must be wrapped as well.
+	_, err = f.Create(map[string]interface{}{},
+		backend.AuthConfig{_sql: failingConfig{}},
+		tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "marshal sql auth config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	_, err = f.Create(map[string]interface{}{},
+		backend.AuthConfig{_sql: []string{"not", "a", "mapping"}},
+		tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unmarshal sql auth config")
+	require.NotNil(t, errors.Unwrap(err))
+}
+
+// failingConfig makes yaml.Marshal return an error through the Marshaler
+// interface. Unsupported types (channels, funcs) cannot be used here: yaml.v2
+// panics on those instead of returning an error.
+type failingConfig struct{}
+
+func (failingConfig) MarshalYAML() (interface{}, error) {
+	return nil, errors.New("marshal failure")
 }
 
 func TestClientFactoryAuth(t *testing.T) {

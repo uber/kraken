@@ -15,6 +15,7 @@ package gcsbackend
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -90,6 +91,49 @@ func TestClientFactory(t *testing.T) {
 	_, err := f.Create(config, masterAuth, tally.NoopScope, zap.NewNop().Sugar())
 	fmt.Println(err.Error())
 	require.True(strings.Contains(err.Error(), "invalid gcs credentials"))
+}
+
+func TestClientFactoryConfigError(t *testing.T) {
+	f := factory{}
+
+	// A config that cannot be marshaled, so the factory must name the gcs backend
+	// and keep the underlying error.
+	_, err := f.Create(failingConfig{}, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "marshal gcs config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	// A config that cannot be unmarshaled, so the factory must name the gcs
+	// backend and keep the underlying error.
+	_, err = f.Create([]string{"not", "a", "mapping"}, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unmarshal gcs config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	// The auth config is marshaled and unmarshaled separately, so those two
+	// failures must be wrapped as well.
+	_, err = f.Create(map[string]interface{}{},
+		backend.AuthConfig{_gcs: failingConfig{}},
+		tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "marshal gcs auth config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	_, err = f.Create(map[string]interface{}{},
+		backend.AuthConfig{_gcs: []string{"not", "a", "mapping"}},
+		tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unmarshal gcs auth config")
+	require.NotNil(t, errors.Unwrap(err))
+}
+
+// failingConfig makes yaml.Marshal return an error through the Marshaler
+// interface. Unsupported types (channels, funcs) cannot be used here: yaml.v2
+// panics on those instead of returning an error.
+type failingConfig struct{}
+
+func (failingConfig) MarshalYAML() (interface{}, error) {
+	return nil, errors.New("marshal failure")
 }
 
 func TestClientStat(t *testing.T) {

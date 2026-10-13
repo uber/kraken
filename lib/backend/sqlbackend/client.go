@@ -49,21 +49,21 @@ func (f *factory) Create(
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
-		return nil, errors.New("marshal sql config")
+		return nil, fmt.Errorf("marshal sql config: %w", err)
 	}
 
 	authConfBytes, err := yaml.Marshal(masterAuthConfig[_sql])
 	if err != nil {
-		return nil, errors.New("marshal sql auth config")
+		return nil, fmt.Errorf("marshal sql auth config: %w", err)
 	}
 
 	var config Config
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
-		return nil, errors.New("unmarshal sql config")
+		return nil, fmt.Errorf("unmarshal sql config: %w", err)
 	}
 	var userAuth UserAuthConfig
 	if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
-		return nil, errors.New("unmarshal sql auth config")
+		return nil, fmt.Errorf("unmarshal sql auth config: %w", err)
 	}
 
 	return NewClient(config, userAuth, stats)

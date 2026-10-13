@@ -49,20 +49,20 @@ func (f *factory) Create(
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
-		return nil, errors.New("marshal gcs config")
+		return nil, fmt.Errorf("marshal gcs config: %w", err)
 	}
 	authConfBytes, err := yaml.Marshal(masterAuthConfig[_gcs])
 	if err != nil {
-		return nil, errors.New("marshal gcs auth config")
+		return nil, fmt.Errorf("marshal gcs auth config: %w", err)
 	}
 
 	var config Config
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
-		return nil, errors.New("unmarshal gcs config")
+		return nil, fmt.Errorf("unmarshal gcs config: %w", err)
 	}
 	var userAuth UserAuthConfig
 	if err := yaml.Unmarshal(authConfBytes, &userAuth); err != nil {
-		return nil, errors.New("unmarshal gcs auth config")
+		return nil, fmt.Errorf("unmarshal gcs auth config: %w", err)
 	}
 
 	return NewClient(config, userAuth, stats)

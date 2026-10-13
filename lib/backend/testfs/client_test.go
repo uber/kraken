@@ -14,6 +14,7 @@
 package testfs
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/uber-go/tally"
@@ -33,4 +34,31 @@ func TestClientFactory(t *testing.T) {
 	f := factory{}
 	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
+}
+
+func TestClientFactoryConfigError(t *testing.T) {
+	f := factory{}
+
+	// A config that cannot be marshaled, so the factory must name the testfs backend
+	// and keep the underlying error.
+	_, err := f.Create(failingConfig{}, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "marshal testfs config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	// A config that cannot be unmarshaled, so the factory must name the testfs
+	// backend and keep the underlying error.
+	_, err = f.Create([]string{"not", "a", "mapping"}, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unmarshal testfs config")
+	require.NotNil(t, errors.Unwrap(err))
+}
+
+// failingConfig makes yaml.Marshal return an error through the Marshaler
+// interface. Unsupported types (channels, funcs) cannot be used here: yaml.v2
+// panics on those instead of returning an error.
+type failingConfig struct{}
+
+func (failingConfig) MarshalYAML() (interface{}, error) {
+	return nil, errors.New("marshal failure")
 }

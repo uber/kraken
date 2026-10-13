@@ -15,6 +15,7 @@ package s3backend
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/uber-go/tally"
@@ -86,6 +87,49 @@ func TestClientFactory(t *testing.T) {
 	f := factory{}
 	_, err := f.Create(config, masterAuth, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
+}
+
+func TestClientFactoryConfigError(t *testing.T) {
+	f := factory{}
+
+	// A config that cannot be marshaled, so the factory must name the s3 backend
+	// and keep the underlying error.
+	_, err := f.Create(failingConfig{}, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "marshal s3 config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	// A config that cannot be unmarshaled, so the factory must name the s3
+	// backend and keep the underlying error.
+	_, err = f.Create([]string{"not", "a", "mapping"}, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unmarshal s3 config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	// The auth config is marshaled and unmarshaled separately, so those two
+	// failures must be wrapped as well.
+	_, err = f.Create(map[string]interface{}{},
+		backend.AuthConfig{_s3: failingConfig{}},
+		tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "marshal s3 auth config")
+	require.NotNil(t, errors.Unwrap(err))
+
+	_, err = f.Create(map[string]interface{}{},
+		backend.AuthConfig{_s3: []string{"not", "a", "mapping"}},
+		tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unmarshal s3 auth config")
+	require.NotNil(t, errors.Unwrap(err))
+}
+
+// failingConfig makes yaml.Marshal return an error through the Marshaler
+// interface. Unsupported types (channels, funcs) cannot be used here: yaml.v2
+// panics on those instead of returning an error.
+type failingConfig struct{}
+
+func (failingConfig) MarshalYAML() (interface{}, error) {
+	return nil, errors.New("marshal failure")
 }
 
 func TestClientStat(t *testing.T) {
