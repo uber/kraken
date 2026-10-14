@@ -58,3 +58,15 @@ func TestInvalidConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestStripLocalRemovesLocalIP(t *testing.T) {
+	require := require.New(t)
+
+	l, err := New(Config{Static: []string{"127.0.0.1:80", "127.0.0.1:81", "a:80"}})
+	require.NoError(err)
+
+	stripped, err := StripLocal(l, 80)
+	require.NoError(err)
+
+	require.ElementsMatch([]string{"127.0.0.1:81", "a:80"}, stripped.Resolve().ToSlice())
+}
