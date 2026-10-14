@@ -46,11 +46,11 @@ func (f *blobClientFactory) Create(
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
-		return nil, errors.New("marshal hdfs config")
+		return nil, fmt.Errorf("marshal registry blob config: %w", err)
 	}
 	var config Config
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
-		return nil, errors.New("unmarshal hdfs config")
+		return nil, fmt.Errorf("unmarshal registry blob config: %w", err)
 	}
 	return NewBlobClient(config, stats)
 }

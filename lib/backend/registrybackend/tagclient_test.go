@@ -15,6 +15,7 @@ package registrybackend
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,7 +30,21 @@ import (
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/testutil"
+	"go.uber.org/zap"
 )
+
+func TestTagClientFactoryConfigError(t *testing.T) {
+	require := require.New(t)
+
+	// A sequence cannot be unmarshaled into Config.Address, so the factory must
+	// name the registry tag backend and keep the underlying error.
+	config := map[string]interface{}{"address": []string{"registry.internal"}}
+	f := tagClientFactory{}
+	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(err)
+	require.Contains(err.Error(), "unmarshal registry tag config")
+	require.NotNil(errors.Unwrap(err))
+}
 
 func TestTagDownloadSuccess(t *testing.T) {
 	require := require.New(t)
