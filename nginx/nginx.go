@@ -196,14 +196,8 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	if config.tls.Server.Disabled {
 		log.Warn("Server TLS is disabled")
 	} else {
-		for _, s := range append(
-			config.tls.CAs,
-			config.tls.Server.Cert,
-			config.tls.Server.Key,
-			config.tls.Server.Passphrase) {
-			if _, err := os.Stat(s.Path); err != nil {
-				return fmt.Errorf("invalid TLS config: %s", err)
-			}
+		if err := validateTLSFiles(config.tls); err != nil {
+			return fmt.Errorf("invalid TLS config: %s", err)
 		}
 
 		// Concat all ca files into bundle.
@@ -248,6 +242,41 @@ func Run(config Config, params map[string]interface{}, opts ...Option) error {
 	cmd.Stdout = stdout
 	cmd.Stderr = stdout
 	return cmd.Run()
+}
+
+// validateTLSFiles checks that the files required for server TLS exist.
+// The key passphrase is optional and only checked when a path is set.
+func validateTLSFiles(tls httputil.TLSConfig) error {
+	for i, ca := range tls.CAs {
+		if err := checkTLSFile(fmt.Sprintf("tls.cas[%d].path", i), ca.Path); err != nil {
+			return err
+		}
+	}
+	if err := checkTLSFile("tls.server.cert.path", tls.Server.Cert.Path); err != nil {
+		return err
+	}
+	if err := checkTLSFile("tls.server.key.path", tls.Server.Key.Path); err != nil {
+		return err
+	}
+	if tls.Server.Passphrase.Path != "" {
+		err := checkTLSFile("tls.server.passphrase.path", tls.Server.Passphrase.Path)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkTLSFile returns an error naming the config key if path is empty or
+// cannot be stat'd.
+func checkTLSFile(key, path string) error {
+	if path == "" {
+		return fmt.Errorf("%s is required", key)
+	}
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("%s: %s", key, err)
+	}
+	return nil
 }
 
 func populateTemplate(tmpl string, args map[string]interface{}) ([]byte, error) {
