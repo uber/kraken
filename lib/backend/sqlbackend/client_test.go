@@ -57,43 +57,36 @@ func TestClientFactory(t *testing.T) {
 }
 
 func TestClientFactoryConfigError(t *testing.T) {
-	tests := []struct {
-		give       string
-		giveConfig interface{}
-		giveAuth   backend.AuthConfig
-		wantErr    string
+	testCases := map[string]struct {
+		cfg     interface{}
+		authCfg backend.AuthConfig
+		wantErr string
 	}{
-		{
-			give:       "unmarshalable config",
-			giveConfig: []string{"not", "a", "mapping"},
-			giveAuth:   nil,
-			wantErr:    "unmarshal sql config",
+		"unmarshalable config": {
+			cfg:     []string{"not", "a", "mapping"},
+			wantErr: "unmarshal sql config",
 		},
-		{
-			give:       "marshal failure",
-			giveConfig: failingConfig{},
-			giveAuth:   nil,
-			wantErr:    "marshal sql config",
+		"marshal failure": {
+			cfg:     failingConfig{},
+			wantErr: "marshal sql config",
 		},
-		{
-			give:       "unmarshalable auth config",
-			giveConfig: map[string]interface{}{},
-			giveAuth:   backend.AuthConfig{_sql: []string{"not", "a", "mapping"}},
-			wantErr:    "unmarshal sql auth config",
+		"unmarshalable auth config": {
+			cfg:     map[string]interface{}{},
+			authCfg: backend.AuthConfig{_sql: []string{"not", "a", "mapping"}},
+			wantErr: "unmarshal sql auth config",
 		},
-		{
-			give:       "auth marshal failure",
-			giveConfig: map[string]interface{}{},
-			giveAuth:   backend.AuthConfig{_sql: failingConfig{}},
-			wantErr:    "marshal sql auth config",
+		"auth marshal failure": {
+			cfg:     map[string]interface{}{},
+			authCfg: backend.AuthConfig{_sql: failingConfig{}},
+			wantErr: "marshal sql auth config",
 		},
 	}
 
 	f := factory{}
 
-	for _, tt := range tests {
-		t.Run(tt.give, func(t *testing.T) {
-			_, err := f.Create(tt.giveConfig, tt.giveAuth, tally.NoopScope, zap.NewNop().Sugar())
+	for name, tt := range testCases {
+		t.Run(name, func(t *testing.T) {
+			_, err := f.Create(tt.cfg, tt.authCfg, tally.NoopScope, zap.NewNop().Sugar())
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tt.wantErr)
 			require.NotNil(t, errors.Unwrap(err))

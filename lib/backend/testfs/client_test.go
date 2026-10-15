@@ -37,28 +37,25 @@ func TestClientFactory(t *testing.T) {
 }
 
 func TestClientFactoryConfigError(t *testing.T) {
-	tests := []struct {
-		give       string
-		giveConfig interface{}
-		wantErr    string
+	testCases := map[string]struct {
+		cfg     interface{}
+		wantErr string
 	}{
-		{
-			give:       "unmarshalable config",
-			giveConfig: []string{"not", "a", "mapping"},
-			wantErr:    "unmarshal testfs config",
+		"unmarshalable config": {
+			cfg:     []string{"not", "a", "mapping"},
+			wantErr: "unmarshal testfs config",
 		},
-		{
-			give:       "marshal failure",
-			giveConfig: failingConfig{},
-			wantErr:    "marshal testfs config",
+		"marshal failure": {
+			cfg:     failingConfig{},
+			wantErr: "marshal testfs config",
 		},
 	}
 
 	f := factory{}
 
-	for _, tt := range tests {
-		t.Run(tt.give, func(t *testing.T) {
-			_, err := f.Create(tt.giveConfig, nil, tally.NoopScope, zap.NewNop().Sugar())
+	for name, tt := range testCases {
+		t.Run(name, func(t *testing.T) {
+			_, err := f.Create(tt.cfg, nil, tally.NoopScope, zap.NewNop().Sugar())
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tt.wantErr)
 			require.NotNil(t, errors.Unwrap(err))
