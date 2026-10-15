@@ -90,37 +90,48 @@ func TestClientFactory(t *testing.T) {
 }
 
 func TestClientFactoryConfigError(t *testing.T) {
+	tests := []struct {
+		give       string
+		giveConfig interface{}
+		giveAuth   backend.AuthConfig
+		wantErr    string
+	}{
+		{
+			give:       "unmarshalable config",
+			giveConfig: []string{"not", "a", "mapping"},
+			giveAuth:   nil,
+			wantErr:    "unmarshal s3 config",
+		},
+		{
+			give:       "marshal failure",
+			giveConfig: failingConfig{},
+			giveAuth:   nil,
+			wantErr:    "marshal s3 config",
+		},
+		{
+			give:       "unmarshalable auth config",
+			giveConfig: map[string]interface{}{},
+			giveAuth:   backend.AuthConfig{_s3: []string{"not", "a", "mapping"}},
+			wantErr:    "unmarshal s3 auth config",
+		},
+		{
+			give:       "auth marshal failure",
+			giveConfig: map[string]interface{}{},
+			giveAuth:   backend.AuthConfig{_s3: failingConfig{}},
+			wantErr:    "marshal s3 auth config",
+		},
+	}
+
 	f := factory{}
 
-	// A config that cannot be marshaled, so the factory must name the s3 backend
-	// and keep the underlying error.
-	_, err := f.Create(failingConfig{}, nil, tally.NoopScope, zap.NewNop().Sugar())
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "marshal s3 config")
-	require.NotNil(t, errors.Unwrap(err))
-
-	// A config that cannot be unmarshaled, so the factory must name the s3
-	// backend and keep the underlying error.
-	_, err = f.Create([]string{"not", "a", "mapping"}, nil, tally.NoopScope, zap.NewNop().Sugar())
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unmarshal s3 config")
-	require.NotNil(t, errors.Unwrap(err))
-
-	// The auth config is marshaled and unmarshaled separately, so those two
-	// failures must be wrapped as well.
-	_, err = f.Create(map[string]interface{}{},
-		backend.AuthConfig{_s3: failingConfig{}},
-		tally.NoopScope, zap.NewNop().Sugar())
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "marshal s3 auth config")
-	require.NotNil(t, errors.Unwrap(err))
-
-	_, err = f.Create(map[string]interface{}{},
-		backend.AuthConfig{_s3: []string{"not", "a", "mapping"}},
-		tally.NoopScope, zap.NewNop().Sugar())
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unmarshal s3 auth config")
-	require.NotNil(t, errors.Unwrap(err))
+	for _, tt := range tests {
+		t.Run(tt.give, func(t *testing.T) {
+			_, err := f.Create(tt.giveConfig, tt.giveAuth, tally.NoopScope, zap.NewNop().Sugar())
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.wantErr)
+			require.NotNil(t, errors.Unwrap(err))
+		})
+	}
 }
 
 // failingConfig makes yaml.Marshal return an error through the Marshaler

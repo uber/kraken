@@ -43,21 +43,33 @@ func TestClientFactory(t *testing.T) {
 }
 
 func TestClientFactoryConfigError(t *testing.T) {
+	tests := []struct {
+		give       string
+		giveConfig interface{}
+		wantErr    string
+	}{
+		{
+			give:       "unmarshalable config",
+			giveConfig: []string{"not", "a", "mapping"},
+			wantErr:    "unmarshal http config",
+		},
+		{
+			give:       "marshal failure",
+			giveConfig: failingConfig{},
+			wantErr:    "marshal http config",
+		},
+	}
+
 	f := factory{}
 
-	// A config that cannot be marshaled, so the factory must name the http backend
-	// and keep the underlying error.
-	_, err := f.Create(failingConfig{}, nil, tally.NoopScope, zap.NewNop().Sugar())
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "marshal http config")
-	require.NotNil(t, errors.Unwrap(err))
-
-	// A config that cannot be unmarshaled, so the factory must name the http
-	// backend and keep the underlying error.
-	_, err = f.Create([]string{"not", "a", "mapping"}, nil, tally.NoopScope, zap.NewNop().Sugar())
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unmarshal http config")
-	require.NotNil(t, errors.Unwrap(err))
+	for _, tt := range tests {
+		t.Run(tt.give, func(t *testing.T) {
+			_, err := f.Create(tt.giveConfig, nil, tally.NoopScope, zap.NewNop().Sugar())
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.wantErr)
+			require.NotNil(t, errors.Unwrap(err))
+		})
+	}
 }
 
 // failingConfig makes yaml.Marshal return an error through the Marshaler
