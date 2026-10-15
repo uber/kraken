@@ -73,6 +73,11 @@ To use a custom backend in either role:
 For example, a custom active backend can be paired with testfs:
 
 ```yaml
+auth:
+  custom:
+    token: "example-token"
+  testfs: {}
+
 backends:
   - namespace: .*
     backend:
@@ -87,8 +92,12 @@ backends:
             name_path: docker_tag
 ```
 
-The `endpoint` field is illustrative; the custom factory defines its own configuration
-schema. Both child factories receive the complete `backend.AuthConfig`, the shadow
+The `endpoint` and `token` fields are illustrative; the custom factory defines its own
+configuration and authentication schemas. The top-level `auth` map is a sibling of
+`backends`, with entries keyed by the registered backend names. The empty `testfs`
+entry is sufficient because testfs does not require credentials.
+
+Both child factories receive the complete `backend.AuthConfig`, the shadow
 backend's metrics scope, and its logger. Each factory selects its authentication
 settings by registered name, such as `auth["custom"]`.
 
