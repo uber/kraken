@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/uber/kraken/utils/closers"
-	"golang.org/x/net/context/ctxhttp"
 )
 
 const _defaultTimeout = 32 * time.Second
@@ -128,7 +127,7 @@ func (cli *dockerClient) PullImage(ctx context.Context, repo, tag string) error 
 	if len(query) > 0 {
 		u.RawQuery = query.Encode()
 	}
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader([]byte{}))
+	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), bytes.NewReader([]byte{}))
 	if err != nil {
 		return fmt.Errorf("create request: %s", err)
 	}
@@ -137,7 +136,7 @@ func (cli *dockerClient) PullImage(ctx context.Context, repo, tag string) error 
 	req.URL.Host = cli.addr
 	req.URL.Scheme = cli.scheme
 
-	resp, err := ctxhttp.Do(ctx, cli.client, req)
+	resp, err := cli.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("send post request: %s", err)
 	}
