@@ -11,7 +11,9 @@ before bringing the shadow backend online. This means there will be some downtim
 
 Supported Backends
 ------------------
-This currently supports SQL, HDFS, S3, and testfs backends. 
+The active and shadow backends can use any factory registered with `backend.Register`.
+SQL, HDFS, S3, and testfs are registered automatically by this package. Other built-in
+backends and custom implementations must be imported or registered by the application.
 
 Note that this backend is only enabled as a tag datastore for the build-index. However this could be used as the blob
 datastore for the origin servers, provided it is not configured to use the SQL backend in active or shadow modes. 
@@ -37,4 +39,69 @@ backends:
             addr: localhost:7357
             root: tags
             name_path: docker_tag
-``` 
+```
+
+Custom Backends
+---------------
+To use a custom backend in either role:
+
+1. Implement [`backend.Client`](../client.go) and [`backend.ClientFactory`](../client.go).
+   The factory's `Create` method parses its configuration and authentication settings
+   and returns the client.
+2. Register the factory under a unique name before creating the shadow client. For
+   example, a custom backend package can register its factory in `init`:
+
+   ```go
+   func init() {
+       backend.Register("custom", &factory{})
+   }
+   ```
+
+3. Import the custom package into the application that constructs the shadow backend.
+   If it is only needed for registration, use a blank import:
+
+   ```go
+   import _ "example.com/myapp/custombackend"
+   ```
+
+   Registration happens in the running binary; adding a name to YAML does not load a
+   backend implementation.
+4. Use the registered name as the key under `active_backend` or `shadow_backend`.
+   Each role must contain exactly one backend. No changes to `shadowbackend` are
+   needed to add a registered implementation.
+
+For example, a custom active backend can be paired with testfs:
+
+```yaml
+auth:
+  custom:
+    token: "example-token"
+  testfs: {}
+
+backends:
+  - namespace: .*
+    backend:
+      shadow:
+        active_backend:
+          custom:
+            endpoint: "https://storage.example.com"
+        shadow_backend:
+          testfs:
+            addr: localhost:7357
+            root: tags
+            name_path: docker_tag
+```
+
+The `endpoint` and `token` fields are illustrative; the custom factory defines its own
+configuration and authentication schemas. The top-level `auth` map is a sibling of
+`backends`, with entries keyed by the registered backend names. The empty `testfs`
+entry is sufficient because testfs does not require credentials.
+
+Both child factories receive the complete `backend.AuthConfig`, the shadow
+backend's metrics scope, and its logger. Each factory selects its authentication
+settings by registered name, such as `auth["custom"]`.
+
+The authentication map must contain entries for both registered names, even when a
+backend does not require credentials. An empty entry is sufficient if its factory
+accepts it. A name that has not been registered fails with
+`no backend client defined with name <name>`.
