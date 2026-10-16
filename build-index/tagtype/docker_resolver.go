@@ -20,6 +20,7 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/docker/distribution"
+	"github.com/uber-go/tally"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
@@ -31,6 +32,7 @@ import (
 type dockerResolver struct {
 	originClient  blobclient.ClusterClient
 	backoffConfig httputil.ExponentialBackOffConfig
+	stats         tally.Scope
 }
 
 // Resolve returns all layers + manifest of given tag as its dependencies.
@@ -74,6 +76,9 @@ func (r *dockerResolver) downloadManifest(tag string, d core.Digest) (distributi
 
 	if err := backoff.Retry(retryFunc, r.backoffConfig.Build()); err != nil {
 		return nil, err
+	}
+	if attempt > 1 {
+		r.stats.Counter("manifest_download_retry_successes").Inc(1)
 	}
 	manifest, _, err := dockerutil.ParseManifest(buf)
 	if err != nil {
