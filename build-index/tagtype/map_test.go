@@ -15,14 +15,17 @@ package tagtype
 
 import (
 	"testing"
+	"time"
 
 	"github.com/uber/kraken/core"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/utils/dockerutil"
+	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/mockutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
 
 func testConfigs() []Config {
@@ -97,4 +100,91 @@ func TestMapGetResolverNamespaceError(t *testing.T) {
 	_, err = m.Resolve("invalid/tag", core.DigestFixture())
 	require.Error(err)
 	require.Equal(errNamespaceNotFound, err)
+}
+
+func TestMapDockerBackoffConfig(t *testing.T) {
+	defaults := httputil.ExponentialBackOffConfig{
+		Enabled:             true,
+		InitialInterval:     500 * time.Millisecond,
+		RandomizationFactor: 0.05,
+		Multiplier:          2,
+		MaxInterval:         30 * time.Second,
+		MaxRetries:          3,
+	}
+	partial := defaults
+	partial.InitialInterval = 2 * time.Second
+	partial.MaxRetries = 6
+
+	tests := []struct {
+		desc   string
+		config string
+		want   httputil.ExponentialBackOffConfig
+	}{
+		{
+			desc: "no backoff configured",
+			config: `
+- namespace: .*
+  type: docker
+`,
+			want: defaults,
+		},
+		{
+			desc: "every field configured",
+			config: `
+- namespace: .*
+  type: docker
+  backoff:
+    enabled: true
+    initial_interval: 1s
+    randomization_factor: 0.1
+    multiplier: 3
+    max_interval: 1m
+    max_retries: 5
+`,
+			want: httputil.ExponentialBackOffConfig{
+				Enabled:             true,
+				InitialInterval:     time.Second,
+				RandomizationFactor: 0.1,
+				Multiplier:          3,
+				MaxInterval:         time.Minute,
+				MaxRetries:          5,
+			},
+		},
+		{
+			desc: "some fields configured",
+			config: `
+- namespace: .*
+  type: docker
+  backoff:
+    initial_interval: 2s
+    max_retries: 6
+`,
+			want: partial,
+		},
+		{
+			desc: "enabled set to false",
+			config: `
+- namespace: .*
+  type: docker
+  backoff:
+    enabled: false
+`,
+			want: defaults,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			require := require.New(t)
+
+			var configs []Config
+			require.NoError(yaml.Unmarshal([]byte(tt.config), &configs))
+
+			m, err := NewMap(configs, nil)
+			require.NoError(err)
+
+			r, ok := m.subResolvers[0].resolver.(*dockerResolver)
+			require.True(ok)
+			require.Equal(tt.want, r.backoffConfig)
+		})
+	}
 }
