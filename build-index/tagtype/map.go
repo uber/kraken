@@ -22,6 +22,8 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/httputil"
+
+	"github.com/uber-go/tally"
 )
 
 var errNamespaceNotFound = errors.New("no matches for namespace")
@@ -80,10 +82,17 @@ type Map struct {
 }
 
 // NewMap creates a new Map.
-func NewMap(configs []Config, originClient blobclient.ClusterClient) (*Map, error) {
+func NewMap(
+	configs []Config,
+	stats tally.Scope,
+	originClient blobclient.ClusterClient) (*Map, error) {
+
 	if len(configs) == 0 {
 		return nil, fmt.Errorf("no config specified")
 	}
+	stats = stats.Tagged(map[string]string{
+		"module": "tagtype",
+	})
 	var subResolvers []*subResolver
 	for _, config := range configs {
 		config = config.applyDefaults()
@@ -94,7 +103,7 @@ func NewMap(configs []Config, originClient blobclient.ClusterClient) (*Map, erro
 		var sr *subResolver
 		switch config.Type {
 		case "docker":
-			sr = &subResolver{re, &dockerResolver{originClient, config.Backoff}}
+			sr = &subResolver{re, &dockerResolver{originClient, config.Backoff, stats}}
 		case "default":
 			sr = &subResolver{re, &defaultResolver{}}
 		default:

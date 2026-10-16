@@ -21,6 +21,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 
 	"github.com/uber/kraken/core"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
@@ -46,6 +47,7 @@ func newTestDockerResolver(ctrl *gomock.Controller) (*dockerResolver, *mockblobc
 	resolver := &dockerResolver{
 		originClient:  originClient,
 		backoffConfig: backoffConfig,
+		stats:         tally.NoopScope,
 	}
 
 	return resolver, originClient
@@ -104,6 +106,53 @@ func TestDockerResolver_DownloadManifest_RetryOnBlobNotFound(t *testing.T) {
 	result, err := resolver.downloadManifest(tag, manifest)
 	require.NoError(err)
 	require.NotNil(result)
+}
+
+// retrySuccesses returns the "manifest_download_retry_successes" counter
+// value from the scope.
+func retrySuccesses(scope tally.TestScope) int64 {
+	for _, c := range scope.Snapshot().Counters() {
+		if c.Name() == "manifest_download_retry_successes" {
+			return c.Value()
+		}
+	}
+	return 0
+}
+
+func TestDockerResolver_DownloadManifest_RetrySuccessMetric(t *testing.T) {
+	tests := []struct {
+		desc     string
+		failures int
+		want     int64
+	}{
+		{"succeeds on the first attempt", 0, 0},
+		{"succeeds after one retry", 1, 1},
+		{"succeeds after two retries", 2, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			require, _, resolver, mockOrigin, tag, _, manifest, manifestBytes :=
+				setupDockerResolverTestWithManifest(t)
+			stats := tally.NewTestScope("", nil)
+			resolver.stats = stats
+
+			var calls []*gomock.Call
+			for i := 0; i < tt.failures; i++ {
+				calls = append(calls, mockOrigin.EXPECT().
+					DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
+					Return(blobclient.ErrBlobNotFound))
+			}
+			calls = append(calls, mockOrigin.EXPECT().
+				DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(manifestBytes)).
+				Return(nil))
+			gomock.InOrder(calls...)
+
+			result, err := resolver.downloadManifest(tag, manifest)
+			require.NoError(err)
+			require.NotNil(result)
+			require.Equal(tt.want, retrySuccesses(stats))
+		})
+	}
 }
 
 func TestDockerResolver_DownloadManifest_ExhaustedRetries(t *testing.T) {
