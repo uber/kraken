@@ -110,5 +110,5 @@ func (s Set) Sample(n int) Set {
 		c.Add(x)
 		n--
 	}
-	return s
+	return c
 }
