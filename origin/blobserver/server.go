@@ -534,6 +534,7 @@ func (s *Server) replicateBlobLocally(d core.Digest) error {
 			log.With("digest", d.Hex(), "replica", client.Addr()).Errorf("Failed to get cache reader: %s", err)
 			return fmt.Errorf("get cache reader: %s", err)
 		}
+		defer closers.Close(f)
 		if err := client.TransferBlob(d, f, uint64(blobSize)); err != nil {
 			duration := time.Since(start)
 			log.With("digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to transfer blob: %s", err)
@@ -891,6 +892,7 @@ func (s *Server) commitClusterUploadHandler(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			return fmt.Errorf("get cache file: %s", err)
 		}
+		defer closers.Close(f)
 		if err := client.DuplicateUploadBlob(namespace, d, f, uint64(blobSize), delay); err != nil {
 			duration := time.Since(replicaStart)
 			log.With("namespace", namespace, "digest", d.Hex(), "replica", client.Addr(), "size_bytes", blobSize, "duration_s", duration.Seconds()).Errorf("Failed to duplicate upload: %s", err)

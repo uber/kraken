@@ -21,7 +21,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,6 +38,7 @@ import (
 	"github.com/uber/kraken/lib/persistedretry/writeback"
 	"github.com/uber/kraken/lib/store/disk"
 	"github.com/uber/kraken/lib/store/metadata"
+	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/mockutil"
@@ -919,6 +922,120 @@ func TestForceCleanupV2InvalidParams(t *testing.T) {
 			require.True(httputil.IsStatus(err, http.StatusBadRequest))
 		})
 	}
+}
+
+// requireBlobReaderClosed asserts that r was closed by its owner. Reading from a
+// closed file returns an error matching os.ErrClosed.
+func requireBlobReaderClosed(t *testing.T, r io.Reader) {
+	t.Helper()
+	_, err := r.Read(make([]byte, 1))
+	require.ErrorIs(t, err, os.ErrClosed)
+}
+
+// TestUploadBlobClosesReplicaBlobReader verifies that the cache file reader
+// opened to duplicate a committed upload to a replica is closed once the
+// replication request completes. Leaking it leaks one OS file descriptor per
+// replica for every uploaded blob.
+func TestUploadBlobClosesReplicaBlobReader(t *testing.T) {
+	require := require.New(t)
+
+	ring := hashRingSomeReplica()
+	cp := newTestClientProvider()
+	namespace := core.TagFixture()
+
+	s := newTestServer(t, master1, ring, cp)
+	defer s.cleanup()
+
+	blob := computeBlobForHosts(ring, master1, master2)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var mu sync.Mutex
+	var reader io.Reader
+	replica := mockblobclient.NewMockClient(ctrl)
+	replica.EXPECT().Addr().Return(master2).AnyTimes()
+	replica.EXPECT().DuplicateUploadBlob(
+		namespace, blob.Digest, gomock.Any(), uint64(len(blob.Content)), gomock.Any()).
+		DoAndReturn(func(
+			_ string, _ core.Digest, r io.Reader, _ uint64, _ time.Duration) error {
+			mu.Lock()
+			defer mu.Unlock()
+			reader = r
+			return nil
+		})
+	cp.register(master2, replica)
+
+	s.writeBackManager.EXPECT().Add(
+		writeback.MatchTask(writeback.NewTask(namespace, blob.Digest.Hex(), 0))).Return(nil)
+
+	require.NoError(cp.Provide(master1).UploadBlob(
+		context.Background(), namespace, blob.Digest,
+		bytes.NewReader(blob.Content), uint64(len(blob.Content))))
+
+	mu.Lock()
+	r := reader
+	mu.Unlock()
+	require.NotNil(r, "replica never received the blob")
+	requireBlobReaderClosed(t, r)
+}
+
+// TestReplicateBlobLocallyClosesBlobReader verifies that the cache file reader
+// opened to replicate a remotely-downloaded blob to a peer is closed once the
+// transfer completes.
+func TestReplicateBlobLocallyClosesBlobReader(t *testing.T) {
+	require := require.New(t)
+
+	ring := hashRingSomeReplica()
+	cp := newTestClientProvider()
+	namespace := core.TagFixture()
+
+	s := newTestServer(t, master1, ring, cp)
+	defer s.cleanup()
+
+	blob := computeBlobForHosts(ring, master1, master2)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var mu sync.Mutex
+	var reader io.Reader
+	replica := mockblobclient.NewMockClient(ctrl)
+	replica.EXPECT().Addr().Return(master2).AnyTimes()
+	replica.EXPECT().TransferBlob(blob.Digest, gomock.Any(), uint64(len(blob.Content))).
+		DoAndReturn(func(_ core.Digest, r io.Reader, _ uint64) error {
+			mu.Lock()
+			defer mu.Unlock()
+			reader = r
+			return nil
+		})
+	cp.register(master2, replica)
+
+	backendClient := s.backendClient(namespace, false)
+	backendClient.EXPECT().Stat(namespace, blob.Digest.Hex()).
+		Return(core.NewBlobInfo(int64(len(blob.Content))), nil).AnyTimes()
+	backendClient.EXPECT().Download(namespace, blob.Digest.Hex(), mockutil.MatchWriter(blob.Content)).
+		Return(nil)
+
+	_, err := cp.Provide(master1).GetMetaInfo(namespace, blob.Digest)
+	require.True(httputil.IsAccepted(err))
+
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return reader != nil
+	}), "blob was never replicated")
+
+	require.NoError(testutil.PollUntilTrue(5*time.Second, func() bool {
+		mu.Lock()
+		r := reader
+		mu.Unlock()
+		if r == nil {
+			return false
+		}
+		_, err := r.Read(make([]byte, 1))
+		return errors.Is(err, os.ErrClosed)
+	}), "blob reader passed to replica was not closed")
 }
 
 func TestForceCleanupV2(t *testing.T) {
