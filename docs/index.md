@@ -1,12 +1,9 @@
 <p align="center"><img src="assets/kraken-logo-color.svg" width="175" title="Kraken Logo"></p>
 
 <p align="center">
-</a>
-<a href="https://travis-ci.com/uber/kraken"><img src="https://travis-ci.com/uber/kraken.svg?branch=master"></a>
 <a href="https://github.com/uber/kraken/releases"><img src="https://img.shields.io/github/release/uber/kraken.svg" /></a>
 <a href="https://godoc.org/github.com/uber/kraken"><img src="https://godoc.org/github.com/uber/kraken?status.svg"></a>
 <a href="https://goreportcard.com/badge/github.com/uber/kraken"><img src="https://goreportcard.com/badge/github.com/uber/kraken"></a>
-<a href="https://codecov.io/gh/uber/kraken"><img src="https://codecov.io/gh/uber/kraken/branch/master/graph/badge.svg"></a>
 </p>
 
 Kraken is a P2P-powered Docker registry that focuses on scalability and availability. It is
