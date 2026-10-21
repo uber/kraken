@@ -1,4 +1,6 @@
 site_name: Kraken
+site_url: https://uber.github.io/kraken/
+repo_url: https://github.com/uber/kraken/
 nav:
   - Home: index.md
   - Architecture: ARCHITECTURE.md
