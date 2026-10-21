@@ -47,11 +47,11 @@ func (f *factory) Create(
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
-		return nil, errors.New("marshal hdfs config")
+		return nil, fmt.Errorf("marshal hdfs config: %w", err)
 	}
 	var config Config
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
-		return nil, errors.New("unmarshal hdfs config")
+		return nil, fmt.Errorf("unmarshal hdfs config: %w", err)
 	}
 	return NewClient(config, stats)
 }

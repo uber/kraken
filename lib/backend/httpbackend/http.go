@@ -45,12 +45,12 @@ func (f *factory) Create(
 
 	confBytes, err := yaml.Marshal(confRaw)
 	if err != nil {
-		return nil, errors.New("marshal http config")
+		return nil, fmt.Errorf("marshal http config: %w", err)
 	}
 
 	var config Config
 	if err := yaml.Unmarshal(confBytes, &config); err != nil {
-		return nil, errors.New("unmarshal http config")
+		return nil, fmt.Errorf("unmarshal http config: %w", err)
 	}
 	return NewClient(config, stats)
 }

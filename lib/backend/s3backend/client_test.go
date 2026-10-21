@@ -15,6 +15,7 @@ package s3backend
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/uber-go/tally"
@@ -86,6 +87,53 @@ func TestClientFactory(t *testing.T) {
 	f := factory{}
 	_, err := f.Create(config, masterAuth, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
+}
+
+func TestClientFactoryConfigError(t *testing.T) {
+	testCases := map[string]struct {
+		cfg     interface{}
+		authCfg backend.AuthConfig
+		wantErr string
+	}{
+		"unmarshalable config": {
+			cfg:     []string{"not", "a", "mapping"},
+			wantErr: "unmarshal s3 config",
+		},
+		"marshal failure": {
+			cfg:     failingConfig{},
+			wantErr: "marshal s3 config",
+		},
+		"unmarshalable auth config": {
+			cfg:     map[string]interface{}{},
+			authCfg: backend.AuthConfig{_s3: []string{"not", "a", "mapping"}},
+			wantErr: "unmarshal s3 auth config",
+		},
+		"auth marshal failure": {
+			cfg:     map[string]interface{}{},
+			authCfg: backend.AuthConfig{_s3: failingConfig{}},
+			wantErr: "marshal s3 auth config",
+		},
+	}
+
+	f := factory{}
+
+	for name, tt := range testCases {
+		t.Run(name, func(t *testing.T) {
+			_, err := f.Create(tt.cfg, tt.authCfg, tally.NoopScope, zap.NewNop().Sugar())
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.wantErr)
+			require.NotNil(t, errors.Unwrap(err))
+		})
+	}
+}
+
+// failingConfig makes yaml.Marshal return an error through the Marshaler
+// interface. Unsupported types (channels, funcs) cannot be used here: yaml.v2
+// panics on those instead of returning an error.
+type failingConfig struct{}
+
+func (failingConfig) MarshalYAML() (interface{}, error) {
+	return nil, errors.New("marshal failure")
 }
 
 func TestClientStat(t *testing.T) {

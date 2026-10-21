@@ -15,6 +15,7 @@ package httpbackend
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -39,6 +40,42 @@ func TestClientFactory(t *testing.T) {
 	f := factory{}
 	_, err := f.Create(config, nil, tally.NoopScope, zap.NewNop().Sugar())
 	require.NoError(err)
+}
+
+func TestClientFactoryConfigError(t *testing.T) {
+	testCases := map[string]struct {
+		cfg     interface{}
+		wantErr string
+	}{
+		"unmarshalable config": {
+			cfg:     []string{"not", "a", "mapping"},
+			wantErr: "unmarshal http config",
+		},
+		"marshal failure": {
+			cfg:     failingConfig{},
+			wantErr: "marshal http config",
+		},
+	}
+
+	f := factory{}
+
+	for name, tt := range testCases {
+		t.Run(name, func(t *testing.T) {
+			_, err := f.Create(tt.cfg, nil, tally.NoopScope, zap.NewNop().Sugar())
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.wantErr)
+			require.NotNil(t, errors.Unwrap(err))
+		})
+	}
+}
+
+// failingConfig makes yaml.Marshal return an error through the Marshaler
+// interface. Unsupported types (channels, funcs) cannot be used here: yaml.v2
+// panics on those instead of returning an error.
+type failingConfig struct{}
+
+func (failingConfig) MarshalYAML() (interface{}, error) {
+	return nil, errors.New("marshal failure")
 }
 
 func TestHttpDownloadSuccess(t *testing.T) {
