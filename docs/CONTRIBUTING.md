@@ -52,3 +52,33 @@ Official instructions: https://golangci-lint.run/docs/welcome/install/
 3. Install Git hooks (runs lint automatically on each commit): `make install-hooks`
 4. Make changes and commit (the hook blocks commits on lint errors).
 5. If the hook fails, fix the reported issues and retry the commit.
+
+## Documentation website
+
+The website uses MkDocs and GitHub Pages at
+<https://uber.github.io/kraken/>. It does not use a custom domain.
+
+To preview the site from the repository root:
+
+```sh
+python3 -m venv venv
+. venv/bin/activate
+python -m pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+Run `mkdocs build --strict` before you submit documentation changes.
+The build checks links between documentation pages and local files.
+It writes the website to `site/`.
+
+The `Documentation website` workflow builds documentation changes in PRs.
+It deploys changes from `master` only. PRs and forks cannot deploy this site.
+
+A repository administrator must enable Pages before the first deployment:
+
+1. Open **Settings > Pages** in `uber/kraken`.
+2. Set **Build and deployment > Source** to **GitHub Actions**.
+3. Leave **Custom domain** empty.
+4. Allow only `master` to deploy to the `github-pages` environment.
+5. After the workflow is on `master`, run **Documentation website** from the
+   **Actions** tab if a deployment has not started.
