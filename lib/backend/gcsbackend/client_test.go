@@ -15,27 +15,33 @@ package gcsbackend
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
+	"io"
 	"math/rand"
+	"os"
 	"strconv"
-	"strings"
 	"testing"
 
+	"cloud.google.com/go/storage"
+	"github.com/c2h5oh/datasize"
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
+	"github.com/uber/kraken/lib/backend/backenderrors"
 	mockgcsbackend "github.com/uber/kraken/mocks/lib/backend/gcsbackend"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/mockutil"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/rwutil"
-
-	"cloud.google.com/go/storage"
-	"google.golang.org/api/iterator"
-
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"google.golang.org/api/iterator"
+)
+
+const (
+	_testPath = "root/test"
+	_testName = "test"
 )
 
 type clientMocks struct {
@@ -56,7 +62,7 @@ func newClientMocks(t *testing.T) (*clientMocks, func()) {
 			Location:      "test-location",
 			Bucket:        "test-bucket",
 			NamePath:      "identity",
-			RootDirectory: "/root",
+			RootDirectory: "root",
 			ListMaxKeys:   5,
 		},
 		userAuth: UserAuthConfig{"test-user": auth},
@@ -65,7 +71,7 @@ func newClientMocks(t *testing.T) (*clientMocks, func()) {
 }
 
 func (m *clientMocks) new() *Client {
-	c, err := NewClient(m.config, m.userAuth, tally.NoopScope, WithGCS(m.gcs))
+	c, err := NewClient(m.config, m.userAuth, tally.NoopScope, zap.NewNop().Sugar(), WithGCS(m.gcs))
 	if err != nil {
 		panic(err)
 	}
@@ -80,16 +86,118 @@ func TestClientFactory(t *testing.T) {
 		Location:      "test-region",
 		Bucket:        "test-bucket",
 		NamePath:      "identity",
-		RootDirectory: "/root",
+		RootDirectory: "root",
 	}
 	var auth AuthConfig
 	auth.GCS.AccessBlob = "access_blob"
 	userAuth := UserAuthConfig{"test-user": auth}
-	masterAuth := backend.AuthConfig{_gcs: userAuth}
 	f := factory{}
+	masterAuth := backend.AuthConfig{f.Name(): userAuth}
+
+	// "access_blob" is not a valid credentials JSON blob, so the underlying
+	// storage client cannot be constructed.
 	_, err := f.Create(config, masterAuth, tally.NoopScope, zap.NewNop().Sugar())
-	fmt.Println(err.Error())
-	require.True(strings.Contains(err.Error(), "invalid gcs credentials"))
+	require.Error(err)
+	require.Contains(err.Error(), "new client")
+}
+
+func TestClientFactoryName(t *testing.T) {
+	require.Equal(t, "gcs", (&factory{}).Name())
+}
+
+func TestClientFactoryAuthNotConfigured(t *testing.T) {
+	require := require.New(t)
+
+	config := Config{
+		Username:      "test-user",
+		Bucket:        "test-bucket",
+		NamePath:      "identity",
+		RootDirectory: "root",
+	}
+	f := factory{}
+
+	_, err := f.Create(config, backend.AuthConfig{}, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(err)
+	require.Contains(err.Error(), "auth not configured for username")
+}
+
+func TestClientFactoryInvalidConfig(t *testing.T) {
+	require := require.New(t)
+
+	f := factory{}
+	// username is a string, so a list fails to unmarshal into Config.
+	confRaw := map[string]interface{}{"username": []string{"a", "b"}}
+
+	_, err := f.Create(confRaw, backend.AuthConfig{}, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(err)
+	require.Contains(err.Error(), "unmarshal gcs config")
+}
+
+func TestClientFactoryInvalidAuthConfig(t *testing.T) {
+	require := require.New(t)
+
+	f := factory{}
+	config := Config{Username: "test-user", Bucket: "test-bucket", NamePath: "identity"}
+	// UserAuthConfig is a map, so a plain string fails to unmarshal into it.
+	masterAuth := backend.AuthConfig{f.Name(): "not-a-map"}
+
+	_, err := f.Create(config, masterAuth, tally.NoopScope, zap.NewNop().Sugar())
+	require.Error(err)
+	require.Contains(err.Error(), "unmarshal gcs auth config")
+}
+
+func TestNewClientInvalidConfig(t *testing.T) {
+	var auth AuthConfig
+	auth.GCS.AccessBlob = "access_blob"
+	userAuth := UserAuthConfig{"test-user": auth}
+
+	tests := []struct {
+		desc     string
+		config   Config
+		userAuth UserAuthConfig
+		expected string
+	}{
+		{
+			desc:     "missing username",
+			config:   Config{Bucket: "test-bucket", NamePath: "identity"},
+			userAuth: userAuth,
+			expected: "invalid config: username required",
+		}, {
+			desc:     "missing bucket",
+			config:   Config{Username: "test-user", NamePath: "identity"},
+			userAuth: userAuth,
+			expected: "invalid config: bucket required",
+		}, {
+			desc: "absolute root directory",
+			config: Config{
+				Username:      "test-user",
+				Bucket:        "test-bucket",
+				NamePath:      "identity",
+				RootDirectory: "/root",
+			},
+			userAuth: userAuth,
+			expected: "invalid config: root_directory must not start with '/'",
+		}, {
+			desc:     "unknown namepath",
+			config:   Config{Username: "test-user", Bucket: "test-bucket", NamePath: "nonsense"},
+			userAuth: userAuth,
+			expected: "namepath",
+		}, {
+			desc:     "auth not configured",
+			config:   Config{Username: "other-user", Bucket: "test-bucket", NamePath: "identity"},
+			userAuth: userAuth,
+			expected: "auth not configured for username",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require := require.New(t)
+
+			_, err := NewClient(test.config, test.userAuth, tally.NoopScope, zap.NewNop().Sugar())
+			require.Error(err)
+			require.Contains(err.Error(), test.expected)
+		})
+	}
 }
 
 func TestClientStat(t *testing.T) {
@@ -98,37 +206,164 @@ func TestClientStat(t *testing.T) {
 	mocks, cleanup := newClientMocks(t)
 	defer cleanup()
 
+	mocks.gcs.EXPECT().Close().Return(nil)
+
 	client := mocks.new()
 	defer closers.Close(client)
 
-	var objectAttrs storage.ObjectAttrs
-	objectAttrs.Size = 100
+	mocks.gcs.EXPECT().ObjectAttrs(_testPath).Return(&storage.ObjectAttrs{Size: 100}, nil)
 
-	mocks.gcs.EXPECT().ObjectAttrs("/root/test").Return(&objectAttrs, nil)
-
-	info, err := client.Stat(core.NamespaceFixture(), "test")
+	info, err := client.Stat(core.NamespaceFixture(), _testName)
 	require.NoError(err)
 	require.Equal(core.NewBlobInfo(100), info)
 }
 
+func TestClientStatNotFound(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	mocks.gcs.EXPECT().Close().Return(nil)
+
+	client := mocks.new()
+	defer closers.Close(client)
+
+	mocks.gcs.EXPECT().ObjectAttrs(_testPath).Return(nil, storage.ErrObjectNotExist)
+
+	_, err := client.Stat(core.NamespaceFixture(), _testName)
+	require.Equal(backenderrors.ErrBlobNotFound, err)
+}
+
+func TestClientStatError(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	mocks.gcs.EXPECT().Close().Return(nil)
+
+	client := mocks.new()
+	defer closers.Close(client)
+
+	expectedErr := errors.New("some gcs error")
+	mocks.gcs.EXPECT().ObjectAttrs(_testPath).Return(nil, expectedErr)
+
+	_, err := client.Stat(core.NamespaceFixture(), _testName)
+	require.Equal(expectedErr, err)
+}
+
+// TestClientDownload verifies that a dst which already implements io.WriterAt
+// is passed straight through to GCS, without an intermediate buffer.
 func TestClientDownload(t *testing.T) {
 	require := require.New(t)
 
 	mocks, cleanup := newClientMocks(t)
 	defer cleanup()
 
+	mocks.gcs.EXPECT().Close().Return(nil)
+
 	client := mocks.new()
 	defer closers.Close(client)
+
+	data := randutil.Text(32)
+
+	f, err := os.CreateTemp("", "")
+	require.NoError(err)
+	t.Cleanup(func() { require.NoError(os.Remove(f.Name())) })
+
+	var downloadedTo io.WriterAt
+	mocks.gcs.EXPECT().Download(_testPath, gomock.Any()).DoAndReturn(
+		func(_ string, w io.WriterAt) (int64, error) {
+			downloadedTo = w
+			n, err := w.WriteAt(data, 0)
+			return int64(n), err
+		})
+
+	require.NoError(client.Download(core.NamespaceFixture(), _testName, f))
+	require.Same(f, downloadedTo)
+
+	_, err = f.Seek(0, io.SeekStart)
+	require.NoError(err)
+	result, err := io.ReadAll(f)
+	require.NoError(err)
+	require.Equal(data, result)
+}
+
+// TestClientDownloadWithBuffer verifies that a dst which does not implement
+// io.WriterAt is downloaded into a capped buffer and drained afterwards.
+func TestClientDownloadWithBuffer(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	mocks.gcs.EXPECT().Close().Return(nil)
+
+	client := mocks.new()
+	defer closers.Close(client)
+
 	data := randutil.Text(32)
 
 	mocks.gcs.EXPECT().Download(
-		"/root/test",
-		mockutil.MatchWriter(data),
+		_testPath,
+		mockutil.MatchWriterAt(data),
 	).Return(int64(len(data)), nil)
 
+	// A plain io.Writer requires a buffer to download.
 	w := make(rwutil.PlainWriter, len(data))
-	require.NoError(client.Download(core.NamespaceFixture(), "test", w))
+	require.NoError(client.Download(core.NamespaceFixture(), _testName, w))
 	require.Equal(data, []byte(w))
+}
+
+func TestClientDownloadBufferGuard(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	data := randutil.Text(32)
+	mocks.config.BufferGuard = datasize.ByteSize(len(data) - 1)
+
+	mocks.gcs.EXPECT().Close().Return(nil)
+
+	client := mocks.new()
+	defer closers.Close(client)
+
+	mocks.gcs.EXPECT().Download(_testPath, gomock.Any()).DoAndReturn(
+		func(_ string, w io.WriterAt) (int64, error) {
+			return 0, mustWriteAtError(w, data)
+		})
+
+	w := make(rwutil.PlainWriter, len(data))
+	err := client.Download(core.NamespaceFixture(), _testName, w)
+	require.Error(err)
+	require.Contains(err.Error(), "buffer exceed max capacity")
+}
+
+// mustWriteAtError returns the error of writing b at offset 0 of w.
+func mustWriteAtError(w io.WriterAt, b []byte) error {
+	_, err := w.WriteAt(b, 0)
+	return err
+}
+
+func TestClientDownloadError(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	mocks.gcs.EXPECT().Close().Return(nil)
+
+	client := mocks.new()
+	defer closers.Close(client)
+
+	mocks.gcs.EXPECT().Download(_testPath, gomock.Any()).Return(
+		int64(0), backenderrors.ErrBlobNotFound)
+
+	var b bytes.Buffer
+	err := client.Download(core.NamespaceFixture(), _testName, &b)
+	require.Equal(backenderrors.ErrBlobNotFound, err)
 }
 
 func TestClientUpload(t *testing.T) {
@@ -137,17 +372,37 @@ func TestClientUpload(t *testing.T) {
 	mocks, cleanup := newClientMocks(t)
 	defer cleanup()
 
+	mocks.gcs.EXPECT().Close().Return(nil)
+
 	client := mocks.new()
+	defer closers.Close(client)
 
 	data := randutil.Text(32)
-	dataReader := bytes.NewReader(data)
 
 	mocks.gcs.EXPECT().Upload(
-		"/root/test",
-		gomock.Any(),
+		_testPath,
+		mockutil.MatchReader(data),
 	).Return(int64(len(data)), nil)
 
-	require.NoError(client.Upload(core.NamespaceFixture(), "test", dataReader))
+	require.NoError(client.Upload(core.NamespaceFixture(), _testName, bytes.NewReader(data)))
+}
+
+func TestClientUploadError(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	mocks.gcs.EXPECT().Close().Return(nil)
+
+	client := mocks.new()
+	defer closers.Close(client)
+
+	expectedErr := errors.New("some gcs error")
+	mocks.gcs.EXPECT().Upload(_testPath, gomock.Any()).Return(int64(0), expectedErr)
+
+	err := client.Upload(core.NamespaceFixture(), _testName, bytes.NewReader(randutil.Text(32)))
+	require.Equal(expectedErr, err)
 }
 
 func Alphabets(t *testing.T, maxIterate int) *AlphaIterator {
@@ -196,12 +451,14 @@ func TestClientList(t *testing.T) {
 	mocks, cleanup := newClientMocks(t)
 	defer cleanup()
 
+	mocks.gcs.EXPECT().Close().Return(nil)
+
 	client := mocks.new()
 	defer closers.Close(client)
 
 	contToken := ""
 	mocks.gcs.EXPECT().GetObjectIterator(
-		"/root/test",
+		_testPath,
 	).AnyTimes().Return(Alphabets(t, maxIterate))
 	for i := 0; i < maxIterate; {
 		count := (rand.Int() % 10) + 1
@@ -209,12 +466,12 @@ func TestClientList(t *testing.T) {
 		var ret []string
 		for j := i; j < (i+count) && j < maxIterate; j++ {
 			expected = append(expected, "test/"+strconv.Itoa(j))
-			ret = append(ret, "/root/test/"+strconv.Itoa(j))
+			ret = append(ret, _testPath+"/"+strconv.Itoa(j))
 		}
 
 		continuationToken := ""
 		if (i + count) < maxIterate {
-			strconv.Itoa(i + count)
+			continuationToken = strconv.Itoa(i + count)
 		}
 		mocks.gcs.EXPECT().NextPage(
 			gomock.Any(),
@@ -229,4 +486,74 @@ func TestClientList(t *testing.T) {
 		i += count
 	}
 	require.Equal(contToken, "")
+}
+
+func TestClientListNotPaginated(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	mocks.gcs.EXPECT().Close().Return(nil)
+
+	client := mocks.new()
+	defer closers.Close(client)
+
+	mocks.gcs.EXPECT().GetObjectIterator(_testPath).Return(Alphabets(t, 2))
+	mocks.gcs.EXPECT().NextPage(gomock.Any()).Return(
+		[]string{_testPath + "/0", _testPath + "/1"}, "next-token", nil)
+
+	result, err := client.List("test")
+	require.NoError(err)
+	require.Equal([]string{"test/0", "test/1"}, result.Names)
+	// Continuation tokens are only returned for paginated listings.
+	require.Equal("", result.ContinuationToken)
+}
+
+func TestClientListError(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	mocks.gcs.EXPECT().Close().Return(nil)
+
+	client := mocks.new()
+	defer closers.Close(client)
+
+	expectedErr := errors.New("some gcs error")
+	mocks.gcs.EXPECT().GetObjectIterator(_testPath).Return(Alphabets(t, 1))
+	mocks.gcs.EXPECT().NextPage(gomock.Any()).Return(nil, "", expectedErr)
+
+	_, err := client.List("test")
+	require.Equal(expectedErr, err)
+}
+
+func TestClientClose(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	mocks.gcs.EXPECT().Close().Return(nil)
+	require.NoError(client.Close())
+}
+
+func TestClientCloseError(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+
+	expectedErr := errors.New("some gcs error")
+	mocks.gcs.EXPECT().Close().Return(expectedErr)
+	require.Equal(expectedErr, client.Close())
+}
+
+func TestClientCloseNilGCS(t *testing.T) {
+	require.NoError(t, (&Client{}).Close())
 }
