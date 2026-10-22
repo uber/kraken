@@ -256,8 +256,9 @@ func TestTLSClientFallbackError(t *testing.T) {
 	tls, err := c.BuildClient()
 	require.NoError(err)
 
-	_, err = Get("https://some-non-existent-addr/", SendTLS(tls))
+	_, err = Get("https://some-non-existent-addr/", SendTLS(tls), EnableHTTPFallback())
 	require.Error(err)
+	require.ErrorContains(err, "failed to fallback https to http")
 }
 
 func TestStartCertExpiryMonitor(t *testing.T) {
