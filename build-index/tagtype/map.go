@@ -22,6 +22,8 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/httputil"
+
+	"github.com/uber-go/tally"
 )
 
 var errNamespaceNotFound = errors.New("no matches for namespace")
@@ -38,6 +40,30 @@ const (
 type Config struct {
 	Namespace string `yaml:"namespace"`
 	Type      string `yaml:"type"`
+
+	// Backoff controls how the docker type retries manifest downloads. Fields
+	// left at zero take the defaults above, and retries are always enabled.
+	Backoff httputil.ExponentialBackOffConfig `yaml:"backoff"`
+}
+
+func (c Config) applyDefaults() Config {
+	c.Backoff.Enabled = true
+	if c.Backoff.InitialInterval == 0 {
+		c.Backoff.InitialInterval = defaultInitialInterval
+	}
+	if c.Backoff.RandomizationFactor == 0 {
+		c.Backoff.RandomizationFactor = defaultRandomizationFactor
+	}
+	if c.Backoff.Multiplier == 0 {
+		c.Backoff.Multiplier = defaultMultiplier
+	}
+	if c.Backoff.MaxInterval == 0 {
+		c.Backoff.MaxInterval = defaultMaxInterval
+	}
+	if c.Backoff.MaxRetries == 0 {
+		c.Backoff.MaxRetries = defaultMaxRetries
+	}
+	return c
 }
 
 // DependencyResolver returns a list of blob dependencies for a tag->digest mapping.
@@ -56,12 +82,20 @@ type Map struct {
 }
 
 // NewMap creates a new Map.
-func NewMap(configs []Config, originClient blobclient.ClusterClient) (*Map, error) {
+func NewMap(
+	configs []Config,
+	stats tally.Scope,
+	originClient blobclient.ClusterClient) (*Map, error) {
+
 	if len(configs) == 0 {
 		return nil, fmt.Errorf("no config specified")
 	}
+	stats = stats.Tagged(map[string]string{
+		"module": "tagtype",
+	})
 	var subResolvers []*subResolver
 	for _, config := range configs {
+		config = config.applyDefaults()
 		re, err := regexp.Compile(config.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("regexp: %s", err)
@@ -69,15 +103,7 @@ func NewMap(configs []Config, originClient blobclient.ClusterClient) (*Map, erro
 		var sr *subResolver
 		switch config.Type {
 		case "docker":
-			backoffConfig := httputil.ExponentialBackOffConfig{
-				Enabled:             true,
-				InitialInterval:     defaultInitialInterval,
-				RandomizationFactor: defaultRandomizationFactor,
-				Multiplier:          defaultMultiplier,
-				MaxInterval:         defaultMaxInterval,
-				MaxRetries:          defaultMaxRetries,
-			}
-			sr = &subResolver{re, &dockerResolver{originClient, backoffConfig}}
+			sr = &subResolver{re, &dockerResolver{originClient, config.Backoff, stats}}
 		case "default":
 			sr = &subResolver{re, &defaultResolver{}}
 		default:

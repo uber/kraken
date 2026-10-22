@@ -221,7 +221,7 @@ func Run(flags *Flags, opts ...Option) {
 
 	tagStore := tagstore.New(config.TagStore, ss, backends, writeBackManager)
 
-	depResolver, err := tagtype.NewMap(config.TagTypes, originClient)
+	depResolver, err := tagtype.NewMap(config.TagTypes, stats, originClient)
 	if err != nil {
 		log.Fatalf("Error creating tag type manager: %s", err)
 	}
