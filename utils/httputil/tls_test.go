@@ -51,6 +51,7 @@ func genKeyPair(t *testing.T, caPEM, caKeyPEM, caSercret []byte) (certPEM, keyPE
 		},
 		NotBefore: time.Now().Add(-5 * time.Minute),
 		NotAfter:  time.Now().Add(time.Hour * 24 * 180),
+		DNSNames:  []string{"kraken"},
 
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
@@ -165,7 +166,7 @@ func startTLSServer(t *testing.T, clientCAs []Secret) (addr string, serverCA Sec
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256},
 	}
 
-	l, err := tls.Listen("tcp", ":0", config)
+	l, err := tls.Listen("tcp", "127.0.0.1:0", config)
 	require.NoError(err)
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -190,8 +191,6 @@ func TestTLSClientDisabled(t *testing.T) {
 }
 
 func TestTLSClientSuccess(t *testing.T) {
-	t.Skip("TODO https://github.com/uber/kraken/issues/230")
-
 	require := require.New(t)
 	c, cleanup := genCerts(t)
 	defer cleanup()
@@ -215,8 +214,6 @@ func TestTLSClientSuccess(t *testing.T) {
 }
 
 func TestTLSClientBadAuth(t *testing.T) {
-	t.Skip("TODO https://github.com/uber/kraken/issues/230")
-
 	require := require.New(t)
 	c, cleanup := genCerts(t)
 	defer cleanup()
@@ -233,8 +230,6 @@ func TestTLSClientBadAuth(t *testing.T) {
 }
 
 func TestTLSClientFallback(t *testing.T) {
-	t.Skip("TODO https://github.com/uber/kraken/issues/230")
-
 	require := require.New(t)
 	c := &TLSConfig{}
 	tls, err := c.BuildClient()
@@ -249,14 +244,12 @@ func TestTLSClientFallback(t *testing.T) {
 	addr, stop := testutil.StartServer(r)
 	defer stop()
 
-	resp, err := Get("https://"+addr+"/", SendTLS(tls))
+	resp, err := Get("https://"+addr+"/", SendTLS(tls), EnableHTTPFallback())
 	require.NoError(err)
 	require.Equal(http.StatusOK, resp.StatusCode)
 }
 
 func TestTLSClientFallbackError(t *testing.T) {
-	t.Skip("TODO https://github.com/uber/kraken/issues/230")
-
 	require := require.New(t)
 
 	c := &TLSConfig{}
