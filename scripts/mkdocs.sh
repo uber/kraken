@@ -15,7 +15,10 @@ fi
 pip install -q -r requirements-docs.txt
 
 # Generate docs/index.md file automatically from README.md
-cat README.md | sed 's/(docs\//(/g' > docs/index.md
+sed -e 's|(docs/|(|g' \
+    -e 's|(examples/|(https://github.com/uber/kraken/blob/master/examples/|g' \
+    README.md > docs/index.md
+cp assets/architecture-dark.svg docs/assets/
 
 # Run the mkdocs tool
 echo "cmd is $@"

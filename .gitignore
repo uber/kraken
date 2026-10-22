@@ -60,3 +60,6 @@ env*
 
 # For integration tests.
 .tmptest/
+
+# Generated documentation website.
+/site/
