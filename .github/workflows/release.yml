@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Version bump for this release.'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    outputs:
+      tag: ${{ steps.next_version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute release git context
+        id: release_context
+        run: make -s release-context >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version
+        id: next_version
+        if: steps.release_context.outputs.has_changes == 'true'
+        env:
+          BASE_VERSION: ${{ steps.release_context.outputs.base_version }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
+        run: |
+          version=${BASE_VERSION#v}
+          read -r major minor patch <<< "${version//./ }"
+          case "$RELEASE_TYPE" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          echo "tag=v${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        if: steps.release_context.outputs.has_changes == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.next_version.outputs.tag }}
+          name: Release ${{ steps.next_version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+
+      - name: No new commits, skipping release
+        if: steps.release_context.outputs.has_changes == 'false'
+        run: echo "Skipping - no commits since last tag."
+
+  publish:
+    name: Publish Images
+    needs: release
+    if: needs.release.outputs.tag != ''
+    uses: ./.github/workflows/publish-images.yaml
+    secrets: inherit
