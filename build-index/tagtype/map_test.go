@@ -105,15 +105,12 @@ func TestMapGetResolverNamespaceError(t *testing.T) {
 func TestMapDockerBackoffConfig(t *testing.T) {
 	defaults := httputil.ExponentialBackOffConfig{
 		Enabled:             true,
-		InitialInterval:     500 * time.Millisecond,
-		RandomizationFactor: 0.05,
-		Multiplier:          2,
-		MaxInterval:         30 * time.Second,
-		MaxRetries:          3,
+		InitialInterval:     defaultInitialInterval,
+		RandomizationFactor: defaultRandomizationFactor,
+		Multiplier:          defaultMultiplier,
+		MaxInterval:         defaultMaxInterval,
+		MaxRetries:          defaultMaxRetries,
 	}
-	partial := defaults
-	partial.InitialInterval = 2 * time.Second
-	partial.MaxRetries = 6
 
 	tests := []struct {
 		desc   string
@@ -159,7 +156,14 @@ func TestMapDockerBackoffConfig(t *testing.T) {
     initial_interval: 2s
     max_retries: 6
 `,
-			want: partial,
+			want: httputil.ExponentialBackOffConfig{
+				Enabled:             true,
+				InitialInterval:     2 * time.Second,
+				RandomizationFactor: defaultRandomizationFactor,
+				Multiplier:          defaultMultiplier,
+				MaxInterval:         defaultMaxInterval,
+				MaxRetries:          6,
+			},
 		},
 		{
 			desc: "enabled set to false",
@@ -181,6 +185,7 @@ func TestMapDockerBackoffConfig(t *testing.T) {
 
 			m, err := NewMap(configs, nil)
 			require.NoError(err)
+			require.Len(m.subResolvers, 1)
 
 			r, ok := m.subResolvers[0].resolver.(*dockerResolver)
 			require.True(ok)

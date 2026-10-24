@@ -39,12 +39,14 @@ type Config struct {
 	Namespace string `yaml:"namespace"`
 	Type      string `yaml:"type"`
 
-	// Backoff controls how the docker type retries manifest downloads. Fields
-	// left at zero take the defaults above, and retries are always enabled.
+	// Backoff controls how the docker type retries manifest downloads.
+	// Retries are always enabled for the docker type: Backoff.Enabled is
+	// ignored and set to true. Fields left at zero take the defaults above.
 	Backoff httputil.ExponentialBackOffConfig `yaml:"backoff"`
 }
 
 func (c Config) applyDefaults() Config {
+	// A missing enabled key reads as false, so always enable retries.
 	c.Backoff.Enabled = true
 	if c.Backoff.InitialInterval == 0 {
 		c.Backoff.InitialInterval = defaultInitialInterval
