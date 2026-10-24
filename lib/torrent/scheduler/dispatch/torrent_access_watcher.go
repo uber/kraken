@@ -55,7 +55,7 @@ type pieceReaderCloseWatcher struct {
 
 func (w *pieceReaderCloseWatcher) Close() error {
 	err := w.PieceReader.Close()
-	if err != nil {
+	if err == nil {
 		w.w.touchLastRead()
 	}
 	return err
