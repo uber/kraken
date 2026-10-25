@@ -123,11 +123,14 @@ func TestDockerResolver_DownloadManifest_RetrySuccessMetric(t *testing.T) {
 	tests := []struct {
 		desc     string
 		failures int
+		succeeds bool
 		want     int64
 	}{
-		{"succeeds on the first attempt", 0, 0},
-		{"succeeds after one retry", 1, 1},
-		{"succeeds after two retries", 2, 1},
+		{desc: "succeeds on the first attempt", failures: 0, succeeds: true, want: 0},
+		{desc: "succeeds after one retry", failures: 1, succeeds: true, want: 1},
+		{desc: "succeeds after two retries", failures: 2, succeeds: true, want: 1},
+		// MaxRetries is 3, so every one of the 4 attempts fails.
+		{desc: "never succeeds", failures: 4, succeeds: false, want: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
@@ -142,14 +145,21 @@ func TestDockerResolver_DownloadManifest_RetrySuccessMetric(t *testing.T) {
 					DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
 					Return(blobclient.ErrBlobNotFound))
 			}
-			calls = append(calls, mockOrigin.EXPECT().
-				DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(manifestBytes)).
-				Return(nil))
+			if tt.succeeds {
+				calls = append(calls, mockOrigin.EXPECT().
+					DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(manifestBytes)).
+					Return(nil))
+			}
 			gomock.InOrder(calls...)
 
 			result, err := resolver.downloadManifest(tag, manifest)
-			require.NoError(err)
-			require.NotNil(result)
+			if tt.succeeds {
+				require.NoError(err)
+				require.NotNil(result)
+			} else {
+				require.Equal(blobclient.ErrBlobNotFound, err)
+				require.Nil(result)
+			}
 			require.Equal(tt.want, retrySuccesses(stats))
 		})
 	}
