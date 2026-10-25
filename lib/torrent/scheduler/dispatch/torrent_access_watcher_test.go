@@ -14,7 +14,6 @@
 package dispatch
 
 import (
-	"io"
 	"testing"
 	"time"
 
@@ -24,37 +23,23 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/gen/go/proto/p2p"
 	"github.com/uber/kraken/lib/torrent/storage"
+	"github.com/uber/kraken/lib/torrent/storage/agentstorage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
 	"github.com/uber/kraken/utils/bitsetutil"
 )
 
-type stubPieceReader struct{}
-
-func (stubPieceReader) Read(p []byte) (int, error) { return 0, io.EOF }
-func (stubPieceReader) Close() error               { return nil }
-func (stubPieceReader) Length() int                { return 0 }
-
-// stubTorrent embeds the interface so it inherits every method the dispatcher
-// does not touch, and overrides the piece reader accessors used here.
-type stubTorrent struct {
-	storage.Torrent
-	pr     storage.PieceReader
-	length int
-}
-
-func (t *stubTorrent) GetPieceReader(int) (storage.PieceReader, error) { return t.pr, nil }
-func (t *stubTorrent) NumPieces() int                                  { return 1 }
-func (t *stubTorrent) MaxPieceLength() int64                           { return int64(t.length) }
-func (t *stubTorrent) PieceLength(int) int64                           { return int64(t.length) }
-func (t *stubTorrent) Complete() bool                                  { return false }
-
 // A successful close is the normal outcome for a served piece, so it has to
-// advance the last read time used by SeederTTI preemption.
+// advance the last read time used by the SeederTTI preemption.
 func TestTorrentAccessWatcherRecordsSuccessfulRead(t *testing.T) {
 	require := require.New(t)
 
 	clk := clock.NewMock()
-	w := newTorrentAccessWatcher(&stubTorrent{pr: stubPieceReader{}}, clk)
+	blob := core.SizedBlobFixture(4, 4)
+	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
+	defer cleanup()
+	require.NoError(torrent.WritePiece(piecereader.NewBuffer(blob.Content), 0))
+
+	w := newTorrentAccessWatcher(torrent, clk)
 	before := w.getLastReadTime()
 
 	clk.Add(time.Minute)
@@ -73,10 +58,12 @@ func TestDispatcherRecordsServedPieceRead(t *testing.T) {
 	require := require.New(t)
 
 	clk := clock.NewMock()
-	d := testDispatcher(Config{}, clk, &stubTorrent{
-		pr:     piecereader.NewBuffer([]byte("abcd")),
-		length: 4,
-	})
+	blob := core.SizedBlobFixture(4, 4)
+	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
+	defer cleanup()
+	require.NoError(torrent.WritePiece(piecereader.NewBuffer(blob.Content), 0))
+
+	d := testDispatcher(Config{}, clk, torrent)
 	messages := newMockMessages()
 	p := newPeer(
 		core.PeerIDFixture(), false, bitsetutil.FromBools(true), messages, clk, &peerStats{})
