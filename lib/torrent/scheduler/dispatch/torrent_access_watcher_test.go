@@ -22,7 +22,6 @@ import (
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/gen/go/proto/p2p"
-	"github.com/uber/kraken/lib/torrent/storage"
 	"github.com/uber/kraken/lib/torrent/storage/agentstorage"
 	"github.com/uber/kraken/lib/torrent/storage/piecereader"
 	"github.com/uber/kraken/utils/bitsetutil"
@@ -74,13 +73,9 @@ func TestDispatcherRecordsServedPieceRead(t *testing.T) {
 	d.handlePieceRequest(p, &p2p.PieceRequestMessage{Index: 0, Offset: 0, Length: 4})
 
 	// conn.sendPiecePayload defers closing the reader it was given.
-	var payload storage.PieceReader
-	for _, msg := range messages.sent {
-		if msg.Message.Type == p2p.Message_PIECE_PAYLOAD {
-			payload = msg.Payload
-		}
-	}
-	require.NotNil(payload)
+	require.Len(messages.sent, 1)
+	require.Equal(p2p.Message_PIECE_PAYLOAD, messages.sent[0].Message.Type)
+	payload := messages.sent[0].Payload
 	require.NoError(payload.Close())
 
 	require.Equal(before.Add(time.Minute), d.LastReadTime())
