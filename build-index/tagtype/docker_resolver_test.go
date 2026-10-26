@@ -31,6 +31,9 @@ import (
 	"github.com/uber/kraken/utils/mockutil"
 )
 
+// testMaxRetries is the retry limit of the resolver from newTestDockerResolver.
+const testMaxRetries = 3
+
 func newTestDockerResolver(ctrl *gomock.Controller) (*dockerResolver, *mockblobclient.MockClusterClient) {
 	originClient := mockblobclient.NewMockClusterClient(ctrl)
 
@@ -41,7 +44,7 @@ func newTestDockerResolver(ctrl *gomock.Controller) (*dockerResolver, *mockblobc
 		RandomizationFactor: 0,
 		Multiplier:          2,
 		MaxInterval:         10 * time.Millisecond,
-		MaxRetries:          3,
+		MaxRetries:          testMaxRetries,
 	}
 
 	resolver := &dockerResolver{
@@ -129,8 +132,7 @@ func TestDockerResolver_DownloadManifest_RetrySuccessMetric(t *testing.T) {
 		{desc: "succeeds on the first attempt", failures: 0, succeeds: true, want: 0},
 		{desc: "succeeds after one retry", failures: 1, succeeds: true, want: 1},
 		{desc: "succeeds after two retries", failures: 2, succeeds: true, want: 1},
-		// MaxRetries is 3, so every one of the 4 attempts fails.
-		{desc: "never succeeds", failures: 4, succeeds: false, want: 0},
+		{desc: "never succeeds", failures: testMaxRetries + 1, succeeds: false, want: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
