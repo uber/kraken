@@ -31,11 +31,14 @@ func TestPriorityPolicyRemoveSource(t *testing.T) {
 	for k := 0; k < len(peers); k++ {
 		peers[k] = core.PeerInfoFixture()
 	}
-	peers = append(peers, src)
+	// The announcing peer and the stored copy are separate objects.
+	stored := core.NewPeerInfo(
+		src.PeerID, src.IP, src.Port, src.Origin, src.Complete)
+	peers = append(peers, stored)
 
 	sorted := policy.SortPeers(src, peers)
 	require.Len(sorted, len(peers)-1)
 	for k := 0; k < len(sorted); k++ {
-		require.NotEqual(src, sorted[k])
+		require.NotEqual(src.PeerID, sorted[k].PeerID)
 	}
 }
