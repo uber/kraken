@@ -27,56 +27,62 @@ import (
 	"github.com/uber/kraken/utils/bitsetutil"
 )
 
-// A successful close is the normal outcome for a served piece, so it has to
-// advance the last read time used by the SeederTTI preemption.
-func TestTorrentAccessWatcherRecordsSuccessfulRead(t *testing.T) {
-	require := require.New(t)
+// A successful close is the normal outcome for a served piece, so both the
+// watcher's own reader and the dispatcher's send path have to advance the last
+// read time used by the SeederTTI preemption.
+func TestSuccessfulReadRecordsAccess(t *testing.T) {
+	tests := []struct {
+		name         string
+		serve        func(t *testing.T, clk *clock.Mock, d *Dispatcher, w *torrentAccessWatcher)
+		lastReadTime func(d *Dispatcher, w *torrentAccessWatcher) time.Time
+	}{
+		{
+			name: "piece reader close",
+			serve: func(t *testing.T, clk *clock.Mock, _ *Dispatcher, w *torrentAccessWatcher) {
+				pr, err := w.GetPieceReader(0)
+				require.NoError(t, err)
+				require.NoError(t, pr.Close())
+			},
+			lastReadTime: func(_ *Dispatcher, w *torrentAccessWatcher) time.Time {
+				return w.getLastReadTime()
+			},
+		},
+		{
+			name: "dispatcher served piece",
+			serve: func(t *testing.T, clk *clock.Mock, d *Dispatcher, _ *torrentAccessWatcher) {
+				messages := newMockMessages()
+				p := newPeer(
+					core.PeerIDFixture(), false, bitsetutil.FromBools(true), messages, clk, &peerStats{})
+				d.handlePieceRequest(p, &p2p.PieceRequestMessage{Index: 0, Offset: 0, Length: 4})
 
-	clk := clock.NewMock()
-	blob := core.SizedBlobFixture(4, 4)
-	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
-	defer cleanup()
-	require.NoError(torrent.WritePiece(piecereader.NewBuffer(blob.Content), 0))
+				// conn.sendPiecePayload defers closing the reader it was given.
+				require.Len(t, messages.sent, 1)
+				require.Equal(t, p2p.Message_PIECE_PAYLOAD, messages.sent[0].Message.Type)
+				require.NoError(t, messages.sent[0].Payload.Close())
+			},
+			lastReadTime: func(d *Dispatcher, _ *torrentAccessWatcher) time.Time {
+				return d.LastReadTime()
+			},
+		},
+	}
 
-	w := newTorrentAccessWatcher(torrent, clk)
-	before := w.getLastReadTime()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clk := clock.NewMock()
+			blob := core.SizedBlobFixture(4, 4)
+			torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
+			defer cleanup()
+			require.NoError(t, torrent.WritePiece(piecereader.NewBuffer(blob.Content), 0))
 
-	clk.Add(time.Minute)
+			d := testDispatcher(Config{}, clk, torrent)
+			w := newTorrentAccessWatcher(torrent, clk)
 
-	pr, err := w.GetPieceReader(0)
-	require.NoError(err)
-	require.NoError(pr.Close())
+			before := tt.lastReadTime(d, w)
+			clk.Add(time.Minute)
 
-	require.Equal(before.Add(time.Minute), w.getLastReadTime())
-}
+			tt.serve(t, clk, d, w)
 
-// Serving a requested piece opens a reader through the access watcher and the
-// conn closes it after sending the payload. Simulate both halves and check that
-// the dispatcher observes the read.
-func TestDispatcherRecordsServedPieceRead(t *testing.T) {
-	require := require.New(t)
-
-	clk := clock.NewMock()
-	blob := core.SizedBlobFixture(4, 4)
-	torrent, cleanup := agentstorage.TorrentFixture(blob.MetaInfo)
-	defer cleanup()
-	require.NoError(torrent.WritePiece(piecereader.NewBuffer(blob.Content), 0))
-
-	d := testDispatcher(Config{}, clk, torrent)
-	messages := newMockMessages()
-	p := newPeer(
-		core.PeerIDFixture(), false, bitsetutil.FromBools(true), messages, clk, &peerStats{})
-
-	before := d.LastReadTime()
-	clk.Add(time.Minute)
-
-	d.handlePieceRequest(p, &p2p.PieceRequestMessage{Index: 0, Offset: 0, Length: 4})
-
-	// conn.sendPiecePayload defers closing the reader it was given.
-	require.Len(messages.sent, 1)
-	require.Equal(p2p.Message_PIECE_PAYLOAD, messages.sent[0].Message.Type)
-	payload := messages.sent[0].Payload
-	require.NoError(payload.Close())
-
-	require.Equal(before.Add(time.Minute), d.LastReadTime())
+			require.Equal(t, before.Add(time.Minute), tt.lastReadTime(d, w))
+		})
+	}
 }
