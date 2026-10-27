@@ -38,6 +38,32 @@ const (
 type Config struct {
 	Namespace string `yaml:"namespace"`
 	Type      string `yaml:"type"`
+
+	// Backoff controls how the docker type retries manifest downloads.
+	// Retries are always enabled for the docker type: Backoff.Enabled is
+	// ignored and set to true. Fields left at zero take the defaults above.
+	Backoff httputil.ExponentialBackOffConfig `yaml:"backoff"`
+}
+
+func (c Config) applyDefaults() Config {
+	// A missing enabled key reads as false, so always enable retries.
+	c.Backoff.Enabled = true
+	if c.Backoff.InitialInterval == 0 {
+		c.Backoff.InitialInterval = defaultInitialInterval
+	}
+	if c.Backoff.RandomizationFactor == 0 {
+		c.Backoff.RandomizationFactor = defaultRandomizationFactor
+	}
+	if c.Backoff.Multiplier == 0 {
+		c.Backoff.Multiplier = defaultMultiplier
+	}
+	if c.Backoff.MaxInterval == 0 {
+		c.Backoff.MaxInterval = defaultMaxInterval
+	}
+	if c.Backoff.MaxRetries == 0 {
+		c.Backoff.MaxRetries = defaultMaxRetries
+	}
+	return c
 }
 
 // DependencyResolver returns a list of blob dependencies for a tag->digest mapping.
@@ -62,6 +88,7 @@ func NewMap(configs []Config, originClient blobclient.ClusterClient) (*Map, erro
 	}
 	var subResolvers []*subResolver
 	for _, config := range configs {
+		config = config.applyDefaults()
 		re, err := regexp.Compile(config.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("regexp: %s", err)
@@ -69,15 +96,7 @@ func NewMap(configs []Config, originClient blobclient.ClusterClient) (*Map, erro
 		var sr *subResolver
 		switch config.Type {
 		case "docker":
-			backoffConfig := httputil.ExponentialBackOffConfig{
-				Enabled:             true,
-				InitialInterval:     defaultInitialInterval,
-				RandomizationFactor: defaultRandomizationFactor,
-				Multiplier:          defaultMultiplier,
-				MaxInterval:         defaultMaxInterval,
-				MaxRetries:          defaultMaxRetries,
-			}
-			sr = &subResolver{re, &dockerResolver{originClient, backoffConfig}}
+			sr = &subResolver{re, &dockerResolver{originClient, config.Backoff}}
 		case "default":
 			sr = &subResolver{re, &defaultResolver{}}
 		default:
