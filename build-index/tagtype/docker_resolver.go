@@ -77,6 +77,8 @@ func (r *dockerResolver) downloadManifest(tag string, d core.Digest) (distributi
 			Info("Manifest download failed, will retry")
 	}
 	if err := backoff.RetryNotify(retryFunc, r.backoffConfig.Build(), notify); err != nil {
+		log.With("tag", tag, "digest", d.Hex(), "attempts", attempt, "error", err).
+			Error("Manifest download failed")
 		return nil, err
 	}
 	if attempt > 1 {
