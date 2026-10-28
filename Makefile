@@ -175,6 +175,28 @@ TOOLS = \
 .PHONY: tools
 tools: $(NATIVE_TOOLS)
 
+# Computes release git context. Only stable vX.Y.Z tags are considered as
+# the base version; pre-release (e.g. v1.0.0-alpha) and other tags are ignored.
+.PHONY: release-context
+release-context:
+	@set -eu; \
+	latest_tag=$$(git tag --merged HEAD --list 'v*' | \
+		grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | sort -V | tail -n 1 || true); \
+	if [ -n "$$latest_tag" ]; then \
+		base_version="$$latest_tag"; \
+		commit_count=$$(git rev-list "$$latest_tag"..HEAD --count); \
+	else \
+		base_version="v0.0.0"; \
+		commit_count=$$(git rev-list HEAD --count); \
+	fi; \
+	if [ -z "$$latest_tag" ] || [ "$$commit_count" -gt 0 ]; then \
+		has_changes=true; \
+	else \
+		has_changes=false; \
+	fi; \
+	printf 'base_version=%s\n' "$$base_version"; \
+	printf 'has_changes=%s\n' "$$has_changes"
+
 # Creates a release summary containing the build revisions of each component
 # for the specified version.
 releases/%:
