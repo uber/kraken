@@ -51,7 +51,7 @@ jobs:
         run: echo "PACKAGE_VERSION=${INPUT_VERSION:-$(git describe --always --tags)}" >> "$GITHUB_ENV"
 
       - name: Build and push images
-        run: make publish REGISTRY=${{ env.REGISTRY }}
+        run: make publish REGISTRY=${{ env.REGISTRY }} PACKAGE_VERSION=${{ env.PACKAGE_VERSION }}
 
       - name: Also tag and push latest
         run: |

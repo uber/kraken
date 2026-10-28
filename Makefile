@@ -179,7 +179,8 @@ tools: $(NATIVE_TOOLS)
 .PHONY: release-context
 release-context:
 	@set -eu; \
-	latest_tag=$$(git describe --tags --abbrev=0 2>/dev/null || true); \
+	latest_tag=$$(git tag --merged HEAD --list 'v*' | \
+		grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | sort -V | tail -n 1 || true); \
 	if [ -n "$$latest_tag" ]; then \
 		base_version="$$latest_tag"; \
 		commit_count=$$(git rev-list "$$latest_tag"..HEAD --count); \
@@ -192,9 +193,7 @@ release-context:
 	else \
 		has_changes=false; \
 	fi; \
-	printf 'latest_tag=%s\n' "$$latest_tag"; \
 	printf 'base_version=%s\n' "$$base_version"; \
-	printf 'commit_count=%s\n' "$$commit_count"; \
 	printf 'has_changes=%s\n' "$$has_changes"
 
 # Creates a release summary containing the build revisions of each component

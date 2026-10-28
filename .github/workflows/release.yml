@@ -68,6 +68,7 @@ jobs:
   release:
     name: Create Release
     needs: [version, publish]
+    if: needs.version.outputs.tag != ''
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub release
