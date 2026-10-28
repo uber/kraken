@@ -175,7 +175,8 @@ TOOLS = \
 .PHONY: tools
 tools: $(NATIVE_TOOLS)
 
-# Computes release git context.
+# Computes release git context. Only stable vX.Y.Z tags are considered as
+# the base version; pre-release (e.g. v1.0.0-alpha) and other tags are ignored.
 .PHONY: release-context
 release-context:
 	@set -eu; \
