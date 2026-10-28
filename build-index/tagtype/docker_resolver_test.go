@@ -21,6 +21,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 
 	"github.com/uber/kraken/core"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
@@ -29,6 +30,9 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/mockutil"
 )
+
+// testMaxRetries is the retry limit of the resolver from newTestDockerResolver.
+const testMaxRetries = 3
 
 func newTestDockerResolver(ctrl *gomock.Controller) (*dockerResolver, *mockblobclient.MockClusterClient) {
 	originClient := mockblobclient.NewMockClusterClient(ctrl)
@@ -40,12 +44,13 @@ func newTestDockerResolver(ctrl *gomock.Controller) (*dockerResolver, *mockblobc
 		RandomizationFactor: 0,
 		Multiplier:          2,
 		MaxInterval:         10 * time.Millisecond,
-		MaxRetries:          3,
+		MaxRetries:          testMaxRetries,
 	}
 
 	resolver := &dockerResolver{
 		originClient:  originClient,
 		backoffConfig: backoffConfig,
+		stats:         tally.NoopScope,
 	}
 
 	return resolver, originClient
@@ -104,6 +109,62 @@ func TestDockerResolver_DownloadManifest_RetryOnBlobNotFound(t *testing.T) {
 	result, err := resolver.downloadManifest(tag, manifest)
 	require.NoError(err)
 	require.NotNil(result)
+}
+
+// retrySuccesses returns the "manifest_download_retry_successes" counter
+// value from the scope.
+func retrySuccesses(scope tally.TestScope) int64 {
+	for _, c := range scope.Snapshot().Counters() {
+		if c.Name() == "manifest_download_retry_successes" {
+			return c.Value()
+		}
+	}
+	return 0
+}
+
+func TestDockerResolver_DownloadManifest_RetrySuccessMetric(t *testing.T) {
+	tests := []struct {
+		desc     string
+		failures int
+		succeeds bool
+		want     int64
+	}{
+		{desc: "succeeds on the first attempt", failures: 0, succeeds: true, want: 0},
+		{desc: "succeeds after one retry", failures: 1, succeeds: true, want: 1},
+		{desc: "succeeds after two retries", failures: 2, succeeds: true, want: 1},
+		{desc: "never succeeds", failures: testMaxRetries + 1, succeeds: false, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			require, _, resolver, mockOrigin, tag, _, manifest, manifestBytes :=
+				setupDockerResolverTestWithManifest(t)
+			stats := tally.NewTestScope("", nil)
+			resolver.stats = stats
+
+			var calls []*gomock.Call
+			for i := 0; i < tt.failures; i++ {
+				calls = append(calls, mockOrigin.EXPECT().
+					DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
+					Return(blobclient.ErrBlobNotFound))
+			}
+			if tt.succeeds {
+				calls = append(calls, mockOrigin.EXPECT().
+					DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(manifestBytes)).
+					Return(nil))
+			}
+			gomock.InOrder(calls...)
+
+			result, err := resolver.downloadManifest(tag, manifest)
+			if tt.succeeds {
+				require.NoError(err)
+				require.NotNil(result)
+			} else {
+				require.Equal(blobclient.ErrBlobNotFound, err)
+				require.Nil(result)
+			}
+			require.Equal(tt.want, retrySuccesses(stats))
+		})
+	}
 }
 
 func TestDockerResolver_DownloadManifest_ExhaustedRetries(t *testing.T) {

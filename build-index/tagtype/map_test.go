@@ -19,12 +19,14 @@ import (
 
 	"github.com/uber/kraken/core"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
+	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/dockerutil"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/mockutil"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally"
 	"gopkg.in/yaml.v2"
 )
 
@@ -43,7 +45,7 @@ func TestMapResolveDocker(t *testing.T) {
 
 	originClient := mockblobclient.NewMockClusterClient(ctrl)
 
-	m, err := NewMap(testConfigs(), originClient)
+	m, err := NewMap(testConfigs(), tally.NoopScope, originClient)
 	require.NoError(err)
 
 	tag := "namespace-foo/repo-bar:0001"
@@ -57,6 +59,42 @@ func TestMapResolveDocker(t *testing.T) {
 	require.Equal(core.DigestList(append(layers, manifest)), deps)
 }
 
+func TestMapDockerRetrySuccessMetric(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	originClient := mockblobclient.NewMockClusterClient(ctrl)
+	stats := tally.NewTestScope("", nil)
+
+	m, err := NewMap(testConfigs(), stats, originClient)
+	require.NoError(err)
+
+	// Shorten the retry interval so the test does not wait for the default.
+	r, ok := m.subResolvers[0].resolver.(*dockerResolver)
+	require.True(ok)
+	r.backoffConfig.InitialInterval = time.Millisecond
+
+	tag := "namespace-foo/repo-bar:0001"
+	layers := core.DigestListFixture(3)
+	manifest, b := dockerutil.ManifestFixture(layers[0], layers[1], layers[2])
+
+	gomock.InOrder(
+		originClient.EXPECT().DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
+			Return(blobclient.ErrBlobNotFound),
+		originClient.EXPECT().DownloadBlob(gomock.Any(), tag, manifest, mockutil.MatchWriter(b)).
+			Return(nil),
+	)
+
+	_, err = m.Resolve(tag, manifest)
+	require.NoError(err)
+
+	c, ok := stats.Snapshot().Counters()["manifest_download_retry_successes+module=tagtype"]
+	require.True(ok)
+	require.Equal(int64(1), c.Value())
+}
+
 func TestMapResolveDefault(t *testing.T) {
 	require := require.New(t)
 
@@ -65,7 +103,7 @@ func TestMapResolveDefault(t *testing.T) {
 
 	originClient := mockblobclient.NewMockClusterClient(ctrl)
 
-	m, err := NewMap(testConfigs(), originClient)
+	m, err := NewMap(testConfigs(), tally.NoopScope, originClient)
 	require.NoError(err)
 
 	tag := "namespace-bar/repo-bar:0001"
@@ -87,14 +125,14 @@ func TestMapResolveUndefined(t *testing.T) {
 	conf := []Config{
 		{Namespace: "namespace-hello/.*", Type: "undefined"},
 	}
-	_, err := NewMap(conf, originClient)
+	_, err := NewMap(conf, tally.NoopScope, originClient)
 	require.Error(err)
 }
 
 func TestMapGetResolverNamespaceError(t *testing.T) {
 	require := require.New(t)
 
-	m, err := NewMap(testConfigs(), nil)
+	m, err := NewMap(testConfigs(), tally.NoopScope, nil)
 	require.NoError(err)
 
 	_, err = m.Resolve("invalid/tag", core.DigestFixture())
@@ -183,7 +221,7 @@ func TestMapDockerBackoffConfig(t *testing.T) {
 			var configs []Config
 			require.NoError(yaml.Unmarshal([]byte(tt.config), &configs))
 
-			m, err := NewMap(configs, nil)
+			m, err := NewMap(configs, tally.NoopScope, nil)
 			require.NoError(err)
 			require.Len(m.subResolvers, 1)
 
