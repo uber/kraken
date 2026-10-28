@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Version bump for this release.'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Compute Version
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    outputs:
+      tag: ${{ steps.next_version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute release git context
+        id: release_context
+        run: make -s release-context >> "$GITHUB_OUTPUT"
+
+      - name: No new commits, skipping release
+        if: steps.release_context.outputs.has_changes == 'false'
+        run: echo "Skipping - no commits since last tag."
+
+      - name: Compute next version
+        id: next_version
+        if: steps.release_context.outputs.has_changes == 'true'
+        env:
+          BASE_VERSION: ${{ steps.release_context.outputs.base_version }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
+        run: |
+          version=${BASE_VERSION#v}
+          read -r major minor patch <<< "${version//./ }"
+          case "$RELEASE_TYPE" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          echo "tag=v${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish Images
+    needs: version
+    if: needs.version.outputs.tag != ''
+    uses: ./.github/workflows/publish-images.yaml
+    with:
+      version: ${{ needs.version.outputs.tag }}
+    secrets: inherit
+
+  release:
+    name: Create Release
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
