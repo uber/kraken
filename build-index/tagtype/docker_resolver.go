@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cenkalti/backoff"
 	"github.com/docker/distribution"
@@ -61,11 +62,6 @@ func (r *dockerResolver) downloadManifest(tag string, d core.Digest) (distributi
 			return nil
 		}
 
-		if attempt > 1 {
-			log.With("tag", tag, "digest", d.Hex(), "attempt", attempt, "error", err).
-				Warn("Manifest download failed, will retry")
-		}
-
 		if err != blobclient.ErrBlobNotFound &&
 			!httputil.IsNetworkError(err) {
 			return backoff.Permanent(err)
@@ -74,7 +70,15 @@ func (r *dockerResolver) downloadManifest(tag string, d core.Digest) (distributi
 		return err
 	}
 
-	if err := backoff.Retry(retryFunc, r.backoffConfig.Build()); err != nil {
+	// The notify callback runs only when the failure is going to be retried, so the log is accurate for the first
+	// attempt, the last attempt and permanent errors alike.
+	notify := func(err error, next time.Duration) {
+		log.With("tag", tag, "digest", d.Hex(), "attempt", attempt, "error", err, "retry_in", next).
+			Info("Manifest download failed, will retry")
+	}
+	if err := backoff.RetryNotify(retryFunc, r.backoffConfig.Build(), notify); err != nil {
+		log.With("tag", tag, "digest", d.Hex(), "attempts", attempt, "error", err).
+			Error("Manifest download failed")
 		return nil, err
 	}
 	if attempt > 1 {
