@@ -23,26 +23,26 @@ and production, and a development.yaml that contains configs specifically needed
 cluster using Docker-for-Mac, and need to updated for production setups.
 
 - Origin
-  - [base.yaml](../config/origin/base.yaml)
-  - [development.yaml](../examples/devcluster/config/origin/development.yaml)
+  - [base.yaml](https://github.com/uber/kraken/blob/master/config/origin/base.yaml)
+  - [development.yaml](https://github.com/uber/kraken/blob/master/examples/devcluster/config/origin/development.yaml)
 
 - Tracker
-  - [base.yaml](../config/tracker/base.yaml)
-  - [development.yaml](../examples/devcluster/config/tracker/development.yaml)
+  - [base.yaml](https://github.com/uber/kraken/blob/master/config/tracker/base.yaml)
+  - [development.yaml](https://github.com/uber/kraken/blob/master/examples/devcluster/config/tracker/development.yaml)
 
 - Build-index
-  - [base.yaml](../config/build-index/base.yaml)
-  - [development.yaml](../examples/devcluster/config/build-index/development.yaml)
+  - [base.yaml](https://github.com/uber/kraken/blob/master/config/build-index/base.yaml)
+  - [development.yaml](https://github.com/uber/kraken/blob/master/examples/devcluster/config/build-index/development.yaml)
 
 - Proxy
-  - [base.yaml](../config/proxy/base.yaml)
-  - [development.yaml](../examples/devcluster/config/proxy/development.yaml)
+  - [base.yaml](https://github.com/uber/kraken/blob/master/config/proxy/base.yaml)
+  - [development.yaml](https://github.com/uber/kraken/blob/master/examples/devcluster/config/proxy/development.yaml)
 
 - Agent
-  - [base.yaml](../config/agent/base.yaml)
-  - [development.yaml](../examples/devcluster/config/agent/development.yaml)
+  - [base.yaml](https://github.com/uber/kraken/blob/master/config/agent/base.yaml)
+  - [development.yaml](https://github.com/uber/kraken/blob/master/examples/devcluster/config/agent/development.yaml)
 
-More in [examples/devcluster/README.md](../examples/devcluster/README.md)
+More in [examples/devcluster/README.md](https://github.com/uber/kraken/blob/master/examples/devcluster/README.md)
 
 # Configuring Peer To Peer Download
 
