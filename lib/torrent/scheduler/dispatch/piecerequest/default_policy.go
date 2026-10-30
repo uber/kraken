@@ -54,7 +54,7 @@ func (p *defaultPolicy) selectPieces(
 
 			// Replace elements in the 'reservoir' with decreasing probability.
 		} else {
-			j := rand.Intn(k)
+			j := rand.Intn(k + 1)
 			if j < limit {
 				pieces[j] = int(i)
 			}
