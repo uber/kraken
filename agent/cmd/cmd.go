@@ -296,7 +296,9 @@ func Run(ctx context.Context, flags *Flags, opts ...Option) error {
 	// so Shutdown does not block indefinitely if we are exiting due to an error
 	// rather than a signal.
 	cancel()
-	if err := httpServer.Shutdown(context.Background()); err != nil {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Errorf("agent server shutdown: %s", err)
 	}
 	return runErr
