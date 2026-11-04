@@ -345,3 +345,39 @@ func TestClientListPaginated(t *testing.T) {
 	require.Equal([]string{"test/c", "test/d"}, result.Names)
 	require.Equal("", result.ContinuationToken)
 }
+
+func TestClientListSkipsKeysOutsideRoot(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newClientMocks(t)
+	defer cleanup()
+
+	client := mocks.new()
+	defer closers.Close(client)
+
+	mocks.s3.EXPECT().ListObjectsV2Pages(
+		&s3.ListObjectsV2Input{
+			Bucket:  aws.String("test-bucket"),
+			MaxKeys: aws.Int64(250),
+			Prefix:  aws.String("root"),
+		},
+		gomock.Any(),
+	).DoAndReturn(func(
+		input *s3.ListObjectsV2Input,
+		f func(page *s3.ListObjectsV2Output, last bool) bool) error {
+
+		f(&s3.ListObjectsV2Output{
+			Contents: []*s3.Object{
+				{Key: aws.String("root")},
+				{Key: aws.String("rootsibling/a")},
+				{Key: aws.String("root/test/a")},
+			},
+		}, true)
+
+		return nil
+	})
+
+	result, err := client.List("")
+	require.NoError(err)
+	require.Equal([]string{"test/a"}, result.Names)
+}
