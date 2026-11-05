@@ -33,6 +33,12 @@ func (e MultiError) Error() string {
 	return b.String()
 }
 
+// Unwrap returns the underlying errors, so that errors.Is and errors.As can
+// inspect each of them.
+func (e MultiError) Unwrap() []error {
+	return e
+}
+
 // Join converts errs into an error interface.
 func Join(errs []error) error {
 	if errs == nil {
