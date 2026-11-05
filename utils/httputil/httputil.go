@@ -334,6 +334,14 @@ func Send(method, rawurl string, options ...SendOption) (*http.Response, error) 
 		Transport:     opts.transport,
 	}
 
+	// Reset the caller-provided backoff so the first sleep is the configured
+	// InitialInterval. ExponentialBackOff built from config starts at
+	// currentInterval 0, so without a reset the first retries sleep for ~0 and
+	// a backoff reused across calls keeps its previous interval.
+	if opts.retry.backoff != nil {
+		opts.retry.backoff.Reset()
+	}
+
 	var resp *http.Response
 	for {
 		resp, err = client.Do(req)
