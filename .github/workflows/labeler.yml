@@ -6,12 +6,10 @@ jobs:
   labeler:
     permissions:
       pull-requests: write
-      contents: read
-      issues: write
     runs-on: ubuntu-latest
     name: Label the PR size
     steps:
-      - uses: codelytv/pr-size-labeler@v1.10.3
+      - uses: codelytv/pr-size-labeler@v1.12.0
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           s_label: 'size/s'
