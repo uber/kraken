@@ -119,9 +119,9 @@ your k8s cluster:
 $ helm install --name=kraken-demo ./helm
 ```
 Once deployed, each and every node will have a docker registry API exposed on `localhost:30081`.
-For an example pod spec that pulls images from Kraken agent, see [example](examples/k8s/demo.json).
+For an example pod spec that pulls images from Kraken agent, see [example](https://github.com/uber/kraken/blob/master/examples/k8s/demo.json).
 
-For more information on k8s setup, see [README](examples/k8s/README.md).
+For more information on k8s setup, see [README](https://github.com/uber/kraken/blob/master/examples/k8s/README.md).
 
 ## Devcluster
 
@@ -132,7 +132,7 @@ $ make devcluster
 ```
 
 Docker-for-Mac is required for making dev-cluster work on your laptop.
-For more information on devcluster, please check out devcluster [README](examples/devcluster/README.md).
+For more information on devcluster, please check out devcluster [README](https://github.com/uber/kraken/blob/master/examples/devcluster/README.md).
 
 # Comparison With Other Projects
 
