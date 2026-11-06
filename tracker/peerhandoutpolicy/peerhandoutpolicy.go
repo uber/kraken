@@ -70,7 +70,7 @@ func NewPriorityPolicy(stats tally.Scope, priorityPolicy string) (*PriorityPolic
 func (p *PriorityPolicy) SortPeers(source *core.PeerInfo, peers []*core.PeerInfo) []*core.PeerInfo {
 	peerPriorities := make([]*peerPriorityInfo, 0, len(peers))
 	for _, peer := range peers {
-		if peer == source {
+		if peer.PeerID == source.PeerID {
 			continue
 		}
 		priority, label := p.policy.assignPriority(peer)
