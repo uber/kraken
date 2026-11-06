@@ -15,6 +15,7 @@ package dockerregistry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -22,9 +23,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/distribution/distribution/v3/registry/storage/driver"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/randutil"
@@ -146,7 +147,7 @@ func TestStorageDriverWriter(t *testing.T) {
 	defer cleanup()
 
 	sd, testImage := td.setup()
-	newUploadPath := genUploadDataPath(uuid.NewString())
+	newUploadPath := genUploadDataPath(uuid.New().String())
 
 	testCases := []struct {
 		input string
@@ -255,4 +256,52 @@ func TestStorageDriverMove(t *testing.T) {
 	data, err := io.ReadAll(reader)
 	require.NoError(err)
 	require.Equal(uploadContent, string(data))
+}
+
+func TestStorageDriverWalk(t *testing.T) {
+	td, cleanup := newTestDriver()
+	defer cleanup()
+
+	sd, testImage := td.setup()
+	root := genManifestListPath(testImage.repo)
+
+	t.Run("lists tags as directories", func(t *testing.T) {
+		require := require.New(t)
+		var paths []string
+		err := sd.Walk(contextFixture(), root, func(fi driver.FileInfo) error {
+			require.True(fi.IsDir())
+			paths = append(paths, fi.Path())
+			return driver.ErrSkipDir
+		})
+		require.NoError(err)
+		require.Equal([]string{root + "/" + testImage.tag}, paths)
+	})
+
+	t.Run("filled buffer stops without error", func(t *testing.T) {
+		require := require.New(t)
+		calls := 0
+		err := sd.Walk(contextFixture(), root, func(fi driver.FileInfo) error {
+			calls++
+			return driver.ErrFilledBuffer
+		})
+		require.NoError(err)
+		require.Equal(1, calls)
+	})
+
+	t.Run("callback error is returned", func(t *testing.T) {
+		require := require.New(t)
+		want := errors.New("boom")
+		err := sd.Walk(contextFixture(), root, func(fi driver.FileInfo) error {
+			return want
+		})
+		require.Equal(want, err)
+	})
+
+	t.Run("unsupported path", func(t *testing.T) {
+		require := require.New(t)
+		err := sd.Walk(contextFixture(), genBlobDataPath(testImage.layer1.Digest.Hex()), func(fi driver.FileInfo) error {
+			return nil
+		})
+		require.Equal(InvalidRequestError{genBlobDataPath(testImage.layer1.Digest.Hex())}, err)
+	})
 }

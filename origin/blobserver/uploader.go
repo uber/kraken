@@ -17,8 +17,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/closers"
@@ -43,7 +43,7 @@ func (u *uploader) start(d core.Digest) (uid string, err error) {
 		log.With("digest", d.Hex()).Debug("Blob already exists, cannot start new upload")
 		return "", handler.ErrorStatus(http.StatusConflict)
 	}
-	uid = uuid.NewString()
+	uid = uuid.New().String()
 	if err := u.cas.CreateUploadFile(uid, 0); err != nil {
 		log.With("digest", d.Hex(), "uid", uid).Errorf("Failed to create upload file: %s", err)
 		return "", handler.Errorf("create upload file: %s", err)

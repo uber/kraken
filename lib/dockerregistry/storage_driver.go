@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 
 	"github.com/uber/kraken/core"
 
@@ -376,12 +377,44 @@ func (d *KrakenStorageDriver) RedirectURL(r *http.Request, path string) (string,
 	return "", nil
 }
 
-// Walk is not implemented.
+// Walk is only supported for the tags directory of a repository, which is
+// what the registry walks to list tags. Each tag is reported as a directory
+// directly under path. The start-after hint is ignored since the registry
+// filters by its own cursor.
 func (d *KrakenStorageDriver) Walk(
 	ctx context.Context,
 	path string,
 	f driver.WalkFn,
 	options ...func(*driver.WalkOptions)) error {
 
-	return errors.New("walk not implemented")
+	log.Debugf("(*KrakenStorageDriver).Walk %s", path)
+	pathType, pathSubType, err := ParsePath(path)
+	if err != nil {
+		return err
+	}
+	if pathType != _manifests || pathSubType != _tags {
+		return InvalidRequestError{path}
+	}
+	tags, err := d.manifests.list(path)
+	if err != nil {
+		return toDriverError(err, path)
+	}
+	sort.Strings(tags)
+	for _, tag := range tags {
+		err := f(driver.FileInfoInternal{
+			FileInfoFields: driver.FileInfoFields{
+				Path:  path + "/" + tag,
+				IsDir: true,
+			},
+		})
+		switch {
+		case err == nil, errors.Is(err, driver.ErrSkipDir):
+			continue
+		case errors.Is(err, driver.ErrFilledBuffer):
+			return nil
+		default:
+			return err
+		}
+	}
+	return nil
 }
