@@ -16,6 +16,7 @@ package blobserver
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -262,4 +263,38 @@ func TestClusterClientStatContinueWhenNotFound(t *testing.T) {
 	require.NoError(err)
 	require.NotNil(bi)
 	require.Equal(int64(256), bi.Size)
+}
+
+func TestPollWrappedErrorExposesOriginErrors(t *testing.T) {
+	require := require.New(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	blob := core.NewBlobFixture()
+	namespace := core.TagFixture()
+
+	mockResolver := mockblobclient.NewMockClientResolver(ctrl)
+
+	mockClient1 := mockblobclient.NewMockClient(ctrl)
+	mockClient2 := mockblobclient.NewMockClient(ctrl)
+
+	mockResolver.EXPECT().Resolve(blob.Digest).Return([]blobclient.Client{mockClient1, mockClient2}, nil)
+	mockClient1.EXPECT().DownloadBlob(gomock.Any(), namespace, blob.Digest, nil).Return(httputil.NetworkError{})
+	mockClient1.EXPECT().Addr().Return("client1")
+	mockClient2.EXPECT().DownloadBlob(gomock.Any(), namespace, blob.Digest, nil).Return(httputil.NetworkError{})
+	mockClient2.EXPECT().Addr().Return("client2")
+
+	b := backoff.WithMaxRetries(backoff.NewConstantBackOff(100*time.Millisecond), 5)
+
+	err := blobclient.Poll(mockResolver, b, blob.Digest, func(c blobclient.Client) error {
+		return c.DownloadBlob(context.Background(), namespace, blob.Digest, nil)
+	})
+	require.Error(err)
+
+	// Callers have to be able to classify the failure even though Poll adds
+	// the origin address to each error.
+	require.True(httputil.IsNetworkError(err))
+	var networkErr httputil.NetworkError
+	require.True(errors.As(err, &networkErr))
 }
