@@ -14,17 +14,25 @@
 package dockerregistry
 
 import (
-	"github.com/docker/distribution/configuration"
-	"github.com/docker/distribution/context"
-	"github.com/docker/distribution/registry"
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/distribution/distribution/v3/configuration"
+	"github.com/distribution/distribution/v3/registry"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/dockerregistry/transfer"
 	"github.com/uber/kraken/lib/store"
+	"go.opentelemetry.io/otel"
 )
 
 const (
 	_rw = "rw"
 	_ro = "ro"
+
+	// Read by the OpenTelemetry auto-exporter that registry.NewRegistry
+	// installs.
+	_otelTracesExporterEnv = "OTEL_TRACES_EXPORTER"
 )
 
 // Config defines registry configuration.
@@ -81,5 +89,22 @@ func (c Config) Build(parameters configuration.Parameters) (*registry.Registry, 
 			"disable": true,
 		},
 	}
-	return registry.NewRegistry(context.Background(), &c.Docker)
+	// registry.NewRegistry initializes OpenTelemetry for the whole process: it
+	// replaces the global tracer provider, propagator and error handler, and
+	// its span exporter defaults to OTLP on localhost. Disable the exporter
+	// unless the operator opted in, and restore the globals afterwards so
+	// kraken's own tracing setup is left untouched.
+	if os.Getenv(_otelTracesExporterEnv) == "" {
+		if err := os.Setenv(_otelTracesExporterEnv, "none"); err != nil {
+			return nil, fmt.Errorf("set %s: %s", _otelTracesExporterEnv, err)
+		}
+	}
+	tp := otel.GetTracerProvider()
+	prop := otel.GetTextMapPropagator()
+	eh := otel.GetErrorHandler()
+	r, err := registry.NewRegistry(context.Background(), &c.Docker)
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(prop)
+	otel.SetErrorHandler(eh)
+	return r, err
 }

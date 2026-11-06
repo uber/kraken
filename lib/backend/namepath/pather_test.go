@@ -16,7 +16,7 @@ package namepath
 import (
 	"testing"
 
-	"github.com/docker/distribution/reference"
+	"github.com/distribution/reference"
 	"github.com/stretchr/testify/require"
 )
 
