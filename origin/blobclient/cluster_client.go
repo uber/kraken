@@ -14,6 +14,7 @@
 package blobclient
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -259,8 +260,23 @@ func (c *clusterClient) DownloadBlob(ctx context.Context, namespace string, d co
 
 	log.WithTraceContext(ctx).With("namespace", namespace, "digest", d.Hex()).Debug("Starting blob download from origin cluster")
 
+	w := newRestartableWriter(dst)
 	err := Poll(c.resolver, c.defaultPollBackOff(), d, func(client Client) error {
-		return client.DownloadBlob(ctx, namespace, d, dst)
+		if w.rewind != nil {
+			if err := w.rewind(); err != nil {
+				return &stopPollError{fmt.Errorf("rewind download destination: %w", err)}
+			}
+		}
+		w.written = 0
+
+		err := client.DownloadBlob(ctx, namespace, d, w)
+		// A failed attempt may have written part of the blob to dst. Only try
+		// another origin if that data can be discarded first, otherwise the
+		// next origin's copy would be appended to the partial one.
+		if err != nil && w.rewind == nil && w.written > 0 {
+			return &stopPollError{err}
+		}
+		return err
 	})
 	if httputil.IsNotFound(err) {
 		span.SetStatus(codes.Error, "blob not found")
@@ -352,6 +368,61 @@ func (c *clusterClient) ReplicateToRemote(namespace string, d core.Digest, remot
 	})
 }
 
+// stopPollError tells Poll to return err instead of retrying on another
+// origin, because a retry would corrupt the response destination.
+type stopPollError struct {
+	err error
+}
+
+func (e *stopPollError) Error() string { return e.err.Error() }
+
+// restartableWriter is the io.Writer handed to a single origin download. When
+// dst can be rewound it discards the data written by a failed attempt, so
+// retrying on another origin does not append to a partially written blob.
+type restartableWriter struct {
+	dst     io.Writer
+	rewind  func() error
+	written int
+}
+
+func newRestartableWriter(dst io.Writer) *restartableWriter {
+	w := &restartableWriter{dst: dst}
+	switch d := dst.(type) {
+	case *bytes.Buffer:
+		start := d.Len()
+		w.rewind = func() error {
+			d.Truncate(start)
+			return nil
+		}
+	case io.Seeker:
+		start, err := d.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return w
+		}
+		w.rewind = func() error {
+			if _, err := d.Seek(start, io.SeekStart); err != nil {
+				return err
+			}
+			if t, ok := dst.(interface{ Truncate(int64) error }); ok {
+				return t.Truncate(start)
+			}
+			return nil
+		}
+	default:
+		// Writing to io.Discard never corrupts anything, so a retry is safe.
+		if dst == io.Discard {
+			w.rewind = func() error { return nil }
+		}
+	}
+	return w
+}
+
+func (w *restartableWriter) Write(p []byte) (int, error) {
+	n, err := w.dst.Write(p)
+	w.written += n
+	return n, err
+}
+
 func shuffle(cs []Client) {
 	for i := range cs {
 		j := rand.Intn(i + 1)
@@ -378,6 +449,10 @@ ORIGINS:
 	POLL:
 		for {
 			if err := makeRequest(client); err != nil {
+				var stop *stopPollError
+				if errors.As(err, &stop) {
+					return stop.err
+				}
 				if serr, ok := err.(httputil.StatusError); ok {
 					if serr.Status == http.StatusAccepted {
 						d := b.NextBackOff()
