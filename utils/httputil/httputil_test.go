@@ -319,3 +319,29 @@ func TestParseDigestInvalid(t *testing.T) {
 	_, err := ParseDigest(r, "digest")
 	require.Error(err)
 }
+
+func TestSendRetryResetsExponentialBackoff(t *testing.T) {
+	require := require.New(t)
+
+	// A backoff built the way production builds it: ExponentialBackOffConfig.Build()
+	// returns an ExponentialBackOff whose currentInterval is still 0.
+	b := ExponentialBackOffConfig{
+		Enabled:             true,
+		InitialInterval:     50 * time.Millisecond,
+		Multiplier:          1,
+		MaxInterval:         50 * time.Millisecond,
+		RandomizationFactor: 0.05,
+		MaxRetries:          2,
+	}.Build()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	start := time.Now()
+	_, err := Get(srv.URL, SendRetry(RetryBackoff(b)))
+	require.Error(err)
+	// Two retries at ~50ms each. Without the Reset in Send both sleeps are ~0.
+	require.GreaterOrEqual(time.Since(start), 80*time.Millisecond)
+}
