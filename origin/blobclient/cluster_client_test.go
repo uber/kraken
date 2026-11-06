@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -1106,4 +1107,106 @@ func TestPoll(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+// plainWriter implements only io.Writer, so a failed download cannot be
+// rewound before the next origin takes over.
+type plainWriter struct {
+	buf bytes.Buffer
+}
+
+func (w *plainWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
+
+// TestClusterClientDownloadBlobDoesNotAppendPartialData verifies that a retry
+// on another origin replaces the data of a failed attempt instead of appending
+// to it.
+func TestClusterClientDownloadBlobDoesNotAppendPartialData(t *testing.T) {
+	t.Run("rewindable buffer", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		resolver := mockblobclient.NewMockClientResolver(ctrl)
+		client1 := mockblobclient.NewMockClient(ctrl)
+		client2 := mockblobclient.NewMockClient(ctrl)
+		resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
+		client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
+		client1.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+				_, err := dst.Write([]byte("partial-"))
+				require.NoError(t, err)
+				return httputil.NetworkError{}
+			})
+		client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
+		client2.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+				_, err := dst.Write([]byte("blob data"))
+				return err
+			})
+
+		client := blobclient.NewClusterClient(resolver)
+		var buf bytes.Buffer
+		buf.WriteString("prefix-")
+		err := client.DownloadBlob(context.Background(), _testNamespace, core.DigestFixture(), &buf)
+		require.NoError(t, err)
+		require.Equal(t, "prefix-blob data", buf.String())
+	})
+
+	t.Run("seekable file", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		resolver := mockblobclient.NewMockClientResolver(ctrl)
+		client1 := mockblobclient.NewMockClient(ctrl)
+		client2 := mockblobclient.NewMockClient(ctrl)
+		resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
+		client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
+		client1.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+				_, err := dst.Write([]byte("partial-partial"))
+				require.NoError(t, err)
+				return httputil.NetworkError{}
+			})
+		client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
+		client2.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+				_, err := dst.Write([]byte("blob"))
+				return err
+			})
+
+		f, err := os.CreateTemp(t.TempDir(), "download")
+		require.NoError(t, err)
+		defer f.Close()
+
+		client := blobclient.NewClusterClient(resolver)
+		require.NoError(t, client.DownloadBlob(context.Background(), _testNamespace, core.DigestFixture(), f))
+
+		got, err := os.ReadFile(f.Name())
+		require.NoError(t, err)
+		require.Equal(t, "blob", string(got))
+	})
+
+	t.Run("writer that cannot be rewound", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		resolver := mockblobclient.NewMockClientResolver(ctrl)
+		client1 := mockblobclient.NewMockClient(ctrl)
+		client2 := mockblobclient.NewMockClient(ctrl)
+		resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
+		client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
+		client1.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+				_, err := dst.Write([]byte("partial-"))
+				require.NoError(t, err)
+				return httputil.NetworkError{}
+			})
+		// client2 must not be called: appending its blob to the partial write
+		// would corrupt the download.
+
+		client := blobclient.NewClusterClient(resolver)
+		w := &plainWriter{}
+		err := client.DownloadBlob(context.Background(), _testNamespace, core.DigestFixture(), w)
+		require.Error(t, err)
+		require.Equal(t, "partial-", w.buf.String())
+	})
 }
