@@ -19,7 +19,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/docker/distribution/notifications"
+	"github.com/distribution/distribution/v3/notifications"
 
 	"github.com/uber/kraken/utils/log"
 )
@@ -57,11 +57,25 @@ func NewNotificationHandler(maxChanSize int, useDocker bool) (*NotificationHandl
 	}, nil
 }
 
-// Handler handles messages defined in http://godoc.org/github.com/docker/distribution/notifications.
+// envelope mirrors the fields of notifications.Envelope and
+// notifications.Event the puller uses. The v3 Envelope holds opaque event
+// values, so it cannot be decoded directly.
+type envelope struct {
+	Events []struct {
+		Action string `json:"action"`
+		Target struct {
+			Repository string `json:"repository"`
+			URL        string `json:"url"`
+			Tag        string `json:"tag"`
+		} `json:"target"`
+	} `json:"events"`
+}
+
+// Handler handles messages defined in http://pkg.go.dev/github.com/distribution/distribution/v3/notifications.
 func (n *NotificationHandler) Handler(w http.ResponseWriter, r *http.Request) {
 	log.Debugf("notification received")
 	decoder := json.NewDecoder(r.Body)
-	var envelope notifications.Envelope
+	var envelope envelope
 
 	if err := decoder.Decode(&envelope); err != nil {
 		log.With("err", err).Error("cannot decode envelope")

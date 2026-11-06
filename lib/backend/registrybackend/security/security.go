@@ -24,11 +24,11 @@ import (
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 
-	"github.com/docker/distribution/registry/client/auth"
-	"github.com/docker/distribution/registry/client/auth/challenge"
-	"github.com/docker/distribution/registry/client/transport"
 	"github.com/docker/docker-credential-helpers/client"
 	"github.com/docker/engine-api/types"
+	"github.com/uber/kraken/internal/registryclient/auth"
+	"github.com/uber/kraken/internal/registryclient/auth/challenge"
+	"github.com/uber/kraken/internal/registryclient/transport"
 )
 
 const (

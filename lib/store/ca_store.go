@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/andres-erbsen/clock"
-	"github.com/docker/distribution/uuid"
+	"github.com/google/uuid"
 	"github.com/spaolacci/murmur3"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
@@ -204,7 +204,7 @@ func (s *CAStore) WriteCacheFile(name string, write func(w FileReadWriter) error
 
 // this function writes cache file with an option to write metadata alongside
 func (s *CAStore) writeCacheFile(name string, write func(w FileReadWriter) error, addMetadata bool, pieceLength int64) error {
-	tmp := fmt.Sprintf("%s.%s", name, uuid.Generate().String())
+	tmp := fmt.Sprintf("%s.%s", name, uuid.NewString())
 	if err := s.CreateUploadFile(tmp, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
 	}

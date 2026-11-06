@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/distribution/registry/storage/driver"
-	"github.com/docker/distribution/uuid"
+	"github.com/distribution/distribution/v3/registry/storage/driver"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/utils/randutil"
@@ -146,7 +146,7 @@ func TestStorageDriverWriter(t *testing.T) {
 	defer cleanup()
 
 	sd, testImage := td.setup()
-	newUploadPath := genUploadDataPath(uuid.Generate().String())
+	newUploadPath := genUploadDataPath(uuid.NewString())
 
 	testCases := []struct {
 		input string

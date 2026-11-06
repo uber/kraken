@@ -23,7 +23,7 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/dockerutil"
 
-	"github.com/docker/distribution/uuid"
+	"github.com/google/uuid"
 )
 
 const (
@@ -58,7 +58,7 @@ func (d *testDriver) setup() (*KrakenStorageDriver, testImageUploadBundle) {
 	sd := NewReadWriteStorageDriver(Config{}, d.cas, d.transferer, DefaultVerificationFunc)
 
 	// Create upload
-	uploadUUID := uuid.Generate().String()
+	uploadUUID := uuid.NewString()
 	path := genUploadStartedAtPath(uploadUUID)
 	if err := sd.uploads.putContent(path, _startedat, nil); err != nil {
 		log.Panic(err)
