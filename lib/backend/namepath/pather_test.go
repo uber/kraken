@@ -148,6 +148,16 @@ func TestNameFromBlobPathErrors(t *testing.T) {
 			giveBasepath: "/other/foo/bar",
 			wantErr:      "invalid identity path format",
 		},
+		"identity path is the root itself": {
+			pather:       Identity,
+			giveBasepath: "/root",
+			wantErr:      "invalid identity path format",
+		},
+		"identity path shares the root prefix": {
+			pather:       Identity,
+			giveBasepath: "/rootsibling/foo",
+			wantErr:      "invalid identity path format",
+		},
 	}
 
 	for name, tt := range tests {
@@ -166,4 +176,19 @@ func TestNameFromBlobPathErrors(t *testing.T) {
 			require.Equal(tt.wantName, name)
 		})
 	}
+}
+
+func TestIdentityRoundTripAtFilesystemRoot(t *testing.T) {
+	require := require.New(t)
+
+	p, err := New("/", Identity)
+	require.NoError(err)
+
+	bp, err := p.BlobPath("foo/bar")
+	require.NoError(err)
+	require.Equal("/foo/bar", bp)
+
+	name, err := p.NameFromBlobPath(bp)
+	require.NoError(err)
+	require.Equal("foo/bar", name)
 }

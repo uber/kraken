@@ -161,8 +161,11 @@ func (p IdentityPather) BlobPath(name string) (string, error) {
 
 // NameFromBlobPath strips the root from bp.
 func (p IdentityPather) NameFromBlobPath(bp string) (string, error) {
-	if !strings.HasPrefix(bp, p.root) {
+	// The prefix has to end in a separator, otherwise "/rootsibling/x" passes
+	// as a path under root "/root" and bp == p.root slices past the end of bp.
+	prefix := strings.TrimSuffix(p.root, "/") + "/"
+	if !strings.HasPrefix(bp, prefix) || len(bp) == len(prefix) {
 		return "", errors.New("invalid identity path format")
 	}
-	return bp[len(p.root)+1:], nil
+	return bp[len(prefix):], nil
 }
