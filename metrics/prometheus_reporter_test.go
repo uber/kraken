@@ -30,7 +30,7 @@ func seriesValue(t *testing.T, r *prometheusReporter, name string, labels map[st
 }
 
 func TestPrometheusReporterCounterAccumulatesDeltas(t *testing.T) {
-	r := newPrometheusReporter()
+	r := newPrometheusReporter(nil)
 	r.ReportCounter("requests", map[string]string{"code": "200"}, 2)
 	r.ReportCounter("requests", map[string]string{"code": "200"}, 3)
 	r.ReportCounter("requests", map[string]string{"code": "500"}, 1)
@@ -40,7 +40,7 @@ func TestPrometheusReporterCounterAccumulatesDeltas(t *testing.T) {
 }
 
 func TestPrometheusReporterGaugeKeepsLatestValue(t *testing.T) {
-	r := newPrometheusReporter()
+	r := newPrometheusReporter(nil)
 	r.ReportGauge("queue_size", nil, 7)
 	r.ReportGauge("queue_size", nil, 4)
 
@@ -48,7 +48,7 @@ func TestPrometheusReporterGaugeKeepsLatestValue(t *testing.T) {
 }
 
 func TestPrometheusReporterEmptyTagValueIsSameSeries(t *testing.T) {
-	r := newPrometheusReporter()
+	r := newPrometheusReporter(nil)
 	r.ReportCounter("errors", map[string]string{"namespace": ""}, 1)
 	r.ReportCounter("errors", nil, 1)
 
@@ -57,7 +57,7 @@ func TestPrometheusReporterEmptyTagValueIsSameSeries(t *testing.T) {
 }
 
 func TestPrometheusReporterDropsKindConflicts(t *testing.T) {
-	r := newPrometheusReporter()
+	r := newPrometheusReporter(nil)
 	r.ReportCounter("conflict", nil, 1)
 	r.ReportGauge("conflict", nil, 10)
 	r.ReportGauge("conflict", nil, 20)
@@ -68,7 +68,7 @@ func TestPrometheusReporterDropsKindConflicts(t *testing.T) {
 }
 
 func TestPrometheusReporterSanitizesNames(t *testing.T) {
-	r := newPrometheusReporter()
+	r := newPrometheusReporter(nil)
 	r.ReportCounter("peer.conn-errors", map[string]string{"remote.host": "a.b"}, 1)
 
 	require.Equal(t, 1.0,

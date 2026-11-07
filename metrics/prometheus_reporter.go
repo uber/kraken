@@ -43,6 +43,13 @@ type promSeries struct {
 	name   string
 	labels map[string]string
 	value  float64
+
+	// Histogram fields. upperBounds excludes +Inf; counts has one extra slot
+	// for the +Inf bucket and is not cumulative.
+	upperBounds []float64
+	counts      []uint64
+	count       uint64
+	sum         float64
 }
 
 // prometheusReporter is a tally.StatsReporter that keeps the latest value of
@@ -51,17 +58,19 @@ type promSeries struct {
 // A metric name maps to exactly one kind. If tally reports the same name as a
 // different kind, those reports are dropped and a warning is logged once.
 type prometheusReporter struct {
-	mu        sync.Mutex
-	series    map[string]*promSeries
-	kinds     map[string]promKind
-	conflicts map[string]bool
+	mu           sync.Mutex
+	timerBuckets []float64
+	series       map[string]*promSeries
+	kinds        map[string]promKind
+	conflicts    map[string]bool
 }
 
-func newPrometheusReporter() *prometheusReporter {
+func newPrometheusReporter(timerBuckets []float64) *prometheusReporter {
 	return &prometheusReporter{
-		series:    make(map[string]*promSeries),
-		kinds:     make(map[string]promKind),
-		conflicts: make(map[string]bool),
+		timerBuckets: timerBuckets,
+		series:       make(map[string]*promSeries),
+		kinds:        make(map[string]promKind),
+		conflicts:    make(map[string]bool),
 	}
 }
 
