@@ -53,7 +53,13 @@ type promSeries struct {
 }
 
 // prometheusReporter is a tally.StatsReporter that keeps the latest value of
-// every series in memory.
+// every series in memory and exposes them as a prometheus.Collector.
+//
+// Prometheus requires every series of a metric to share the same label names,
+// but tally does not: the same metric can be emitted from scopes tagged with
+// different keys. Rather than dropping such series, the collector pads
+// missing labels with the empty string, which Prometheus treats as equivalent
+// to the label being absent.
 //
 // A metric name maps to exactly one kind. If tally reports the same name as a
 // different kind, those reports are dropped and a warning is logged once.
