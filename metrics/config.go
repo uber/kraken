@@ -15,9 +15,10 @@ package metrics
 
 // Config defines metrics configuration.
 type Config struct {
-	Backend string       `yaml:"backend"`
-	Statsd  StatsdConfig `yaml:"statsd"`
-	M3      M3Config     `yaml:"m3"`
+	Backend    string           `yaml:"backend"`
+	Statsd     StatsdConfig     `yaml:"statsd"`
+	M3         M3Config         `yaml:"m3"`
+	Prometheus PrometheusConfig `yaml:"prometheus"`
 }
 
 // StatsdConfig defines statsd configuration.
