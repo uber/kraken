@@ -12,6 +12,8 @@
 - [Configuring Storage Backend For Origin And Build-Index](#configuring-storage-backend-for-origin-and-build-index)
   - [Read-Only Registry Backend](#read-only-registry-backend)
   - [Bandwidth on Origin](#bandwidth-on-origin)
+- [Configuring Metrics](#configuring-metrics)
+  - [Prometheus](#prometheus)
 
 # Examples
 
@@ -302,3 +304,39 @@ When transferring data from and to its storage backend, origins can be configure
 >      egress_bits_per_sec: 8589934592   # 8 Gbit
 >      ingress_bits_per_sec: 85899345920 # 10*8 Gbit
 >```
+
+# Configuring Metrics
+
+Every component emits metrics through [tally](https://github.com/uber-go/tally).
+The `metrics.backend` field selects where they go: `disabled` (default),
+`statsd`, `m3` or `prometheus`.
+
+## Prometheus
+
+The `prometheus` backend starts an HTTP server on its own address and serves
+metrics in the Prometheus exposition format, so they can be scraped directly.
+Give each component on a host a different `listen_address`.
+
+>origin.yaml
+>```yaml
+>metrics:
+>  backend: prometheus
+>  prometheus:
+>    listen_address: ":9091"   # required
+>    handler_path: /metrics    # default
+>    prefix: kraken            # default, prepended to every metric name
+>    timer_buckets: [0.005, 0.05, 0.5, 5, 60] # seconds, optional
+>```
+
+Metric names are joined with `_` and characters that Prometheus does not allow
+are replaced with `_`, so a counter `upload_success` on a scope tagged
+`module: blobserver` is exported as
+`kraken_upload_success{module="blobserver"}`. Timers are exported as
+histograms in seconds (exponential buckets from 1ms to about 65s unless
+`timer_buckets` is set). Go runtime and process metrics are exported as well.
+
+Tally allows the same metric to be emitted with different sets of tags, which
+Prometheus does not. Instead of dropping those series, missing labels are
+exported with an empty value, which Prometheus treats the same as an absent
+label. For tally histograms (not timers), only per-bucket counts are known, so
+`_sum` is estimated from the bucket bounds.
