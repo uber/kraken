@@ -345,3 +345,39 @@ func TestSendRetryResetsExponentialBackoff(t *testing.T) {
 	// Two retries at ~50ms each. Without the Reset in Send both sleeps are ~0.
 	require.GreaterOrEqual(time.Since(start), 80*time.Millisecond)
 }
+
+func TestSendRetriesReuseBackoff(t *testing.T) {
+	require := require.New(t)
+
+	// One backoff reused by two independent Send calls. Resetting only when the
+	// config is built would fix the first call and leave the second sleeping for
+	// ~0, because the shared backoff is already exhausted; the reset has to run
+	// at the start of every Send.
+	b := ExponentialBackOffConfig{
+		Enabled:             true,
+		InitialInterval:     50 * time.Millisecond,
+		Multiplier:          1,
+		MaxInterval:         50 * time.Millisecond,
+		RandomizationFactor: 0.05,
+		MaxRetries:          2,
+	}.Build()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	var elapsed [2]time.Duration
+	for i := range elapsed {
+		start := time.Now()
+		_, err := Get(srv.URL, SendRetry(RetryBackoff(b)))
+		require.Error(err)
+		elapsed[i] = time.Since(start)
+	}
+
+	// Two retries at ~50ms each on every call. Without the reset in Send the
+	// reused backoff is already exhausted on the second call, so it returns
+	// backoff.Stop immediately and elapsed[1] stays near zero.
+	require.GreaterOrEqual(elapsed[0], 80*time.Millisecond)
+	require.GreaterOrEqual(elapsed[1], 80*time.Millisecond)
+}
