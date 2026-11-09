@@ -153,6 +153,11 @@ func TestNameFromBlobPathErrors(t *testing.T) {
 			giveBasepath: "/root",
 			wantErr:      "invalid identity path format",
 		},
+		"identity path is the root with a trailing slash": {
+			pather:       Identity,
+			giveBasepath: "/root/",
+			wantErr:      "invalid identity path format",
+		},
 		"identity path shares the root prefix": {
 			pather:       Identity,
 			giveBasepath: "/rootsibling/foo",
