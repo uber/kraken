@@ -127,7 +127,7 @@ func NewClient(
 
 	ctx := context.Background()
 	sClient, err := storage.NewClient(ctx,
-		option.WithCredentialsJSON([]byte(auth.GCS.AccessBlob)))
+		option.WithAuthCredentialsJSON(option.ServiceAccount, []byte(auth.GCS.AccessBlob)))
 	if err != nil {
 		return nil, fmt.Errorf("invalid gcs credentials: %s", err)
 	}

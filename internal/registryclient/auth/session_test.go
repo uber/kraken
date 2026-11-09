@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/distribution/testutil"
+	"github.com/distribution/distribution/v3/testutil"
 	"github.com/uber/kraken/internal/registryclient/auth/challenge"
 	"github.com/uber/kraken/internal/registryclient/transport"
 )

@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/docker/distribution"
+	"github.com/distribution/distribution/v3"
 	"github.com/uber-go/tally"
 
 	"github.com/uber/kraken/core"
