@@ -3,7 +3,6 @@
 <p align="center">
 <a href="https://github.com/uber/kraken/releases"><img src="https://img.shields.io/github/release/uber/kraken.svg" /></a>
 <a href="https://godoc.org/github.com/uber/kraken"><img src="https://godoc.org/github.com/uber/kraken?status.svg"></a>
-<a href="https://goreportcard.com/badge/github.com/uber/kraken"><img src="https://goreportcard.com/badge/github.com/uber/kraken"></a>
 </p>
 
 Kraken is a P2P-powered Docker registry that focuses on scalability and availability. It is
@@ -187,4 +186,4 @@ Please check out our [guide](CONTRIBUTING.md).
 
 # Contact
 
-To contact us, please join our [Slack channel](https://join.slack.com/t/uber-container-tools/shared_invite/enQtNTIxODAwMDEzNjM1LWIyNzUyMTk3NTAzZGY0MDkzMzQ1YTlmMTUwZmIwNDk3YTA0ZjZjZGRhMTM2NzI0OGM3OGNjMDZiZTI2ZTY5NWY).
+To get in touch with us, please [raise a GitHub issue](https://github.com/uber/kraken/issues/new/choose).

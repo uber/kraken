@@ -3,7 +3,6 @@
 <p align="center">
   <a href="https://github.com/uber/kraken/releases"><img src="https://img.shields.io/github/release/uber/kraken.svg?cache-control=no-cache" /></a>
   <a href="https://godoc.org/github.com/uber/kraken"><img src="https://godoc.org/github.com/uber/kraken?status.svg&cache-control=no-cache"></a>
-  <a href="https://goreportcard.com/badge/github.com/uber/kraken"><img src="https://goreportcard.com/badge/github.com/uber/kraken?cache-control=no-cache"></a>
   <a href="https://deepwiki.com/uber/kraken"><img src="https://deepwiki.com/badge.svg?cache-control=no-cache" alt="Ask DeepWiki"></a>
 </p>
 
@@ -192,4 +191,4 @@ Please check out our [guide](docs/CONTRIBUTING.md).
 
 # Contact
 
-To contact us, please join our [Slack channel](https://join.slack.com/t/uber-container-tools/shared_invite/enQtNTIxODAwMDEzNjM1LWIwYzIxNmUwOGY3MmVmM2MxYTczOTQ4ZDU0YjAxMTA0NDgyNzdlZTA4ZWVkZGNlMDUzZDA1ZTJiZTQ4ZDY0YTM).
+To get in touch with us, please [raise a GitHub issue](https://github.com/uber/kraken/issues/new/choose).
