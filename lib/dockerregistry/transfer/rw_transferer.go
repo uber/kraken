@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"time"
+	"uuid"
 
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
@@ -28,7 +29,6 @@ import (
 	"github.com/uber/kraken/utils/log"
 	"github.com/uber/kraken/utils/memsize"
 
-	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"
 
 	"go.opentelemetry.io/otel"
@@ -151,7 +151,7 @@ func (t *ReadWriteTransferer) downloadFromOrigin(ctx context.Context, namespace 
 	)
 	defer span.End()
 
-	tmp := fmt.Sprintf("%s.%s", d.Hex(), uuid.Generate().String())
+	tmp := fmt.Sprintf("%s.%s", d.Hex(), uuid.New().String())
 	if err := t.cas.CreateUploadFile(tmp, 0); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to create upload file")

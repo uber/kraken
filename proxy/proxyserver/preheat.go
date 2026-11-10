@@ -23,7 +23,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/docker/distribution"
+	"github.com/distribution/distribution/v3"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/dockerutil"

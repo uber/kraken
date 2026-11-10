@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"uuid"
 
 	"github.com/andres-erbsen/clock"
-	"github.com/docker/distribution/uuid"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/utils/closers"
@@ -73,7 +73,7 @@ func (s *SimpleStore) MoveUploadFileToCache(uploadName, cacheName string) error 
 
 // CreateCacheFile initializes a cache file for name from r.
 func (s *SimpleStore) CreateCacheFile(name string, r io.Reader) error {
-	tmp := fmt.Sprintf("%s.%s", name, uuid.Generate().String())
+	tmp := fmt.Sprintf("%s.%s", name, uuid.New().String())
 	if err := s.CreateUploadFile(tmp, 0); err != nil {
 		return fmt.Errorf("create upload file: %s", err)
 	}
