@@ -1,6 +1,8 @@
 name: labeler
 
-on: [pull_request]
+# pull_request_target gives fork PRs a token that can write labels.
+# This is safe because the job does not check out or run PR code.
+on: [pull_request_target]
 
 jobs:
   labeler:
