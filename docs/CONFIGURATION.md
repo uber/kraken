@@ -262,17 +262,27 @@ Example origin config that uses multiple backends:
 
 Two backends read from an existing Docker registry. Both are read-only: uploads and listing return "not supported", so push images to the registry directly.
 
-- `registry_blob` (used by origin) downloads a blob from `<address>/v2/<namespace>/blobs/sha256:<digest>`, and also tries the `manifests` endpoint for the same digest. The namespace of the request is used as the repository name, so it has to match the repository name on the registry.
+- `registry_blob` (used by origin) downloads a blob from `<address>/v2/<namespace>/blobs/sha256:<digest>`, and tries the `manifests` endpoint for the same digest only if the blob lookup returns HTTP 404. The namespace of the request is used as the repository name, so it has to match the repository name on the registry.
 - `registry_tag` (used by build-index) resolves a tag with `<address>/v2/<repo>/manifests/<tag>`. Tag names must be in `repo:tag` form.
 
-Both take the same options:
+Both backends have three configuration fields:
 
 - `address`: registry host and port.
-- `timeout`: request timeout, 60s by default.
-- `security.tls.client`: TLS client settings. `disabled: true` turns off TLS and authentication for this backend, as in the local example below.
-- `security.basic`: `username` and `password` for basic auth.
-- `security.credsStore`: name of a Docker credential helper, for example `ecr-login`.
-- `security.enableHTTPFallback`: fall back to plain HTTP when HTTPS fails. Off by default.
+- `timeout`: timeout for `registry_blob` downloads, 60s by default. It currently does not apply to `registry_blob` stat requests or `registry_tag` requests.
+- `security`: TLS and authentication settings:
+  - `tls.client`: TLS client settings. `disabled: true` turns off TLS and authentication for this backend, as in the local example below.
+  - `basic`: `username` and `password` for basic auth.
+  - `credsStore`: name of a Docker credential helper, for example `ecr-login`.
+  - `enableHTTPFallback`: fall back to plain HTTP when HTTPS fails. Off by default.
+
+For example, a `security` block using basic authentication:
+
+```yaml
+security:
+  basic:
+    username: <username>
+    password: <password>
+```
 
 Authentication is only attempted when `basic` or `credsStore` is set. It handles both basic auth and token challenges.
 
