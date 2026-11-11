@@ -16,22 +16,32 @@ package store
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/andres-erbsen/clock"
 	"github.com/uber-go/tally"
+	"github.com/uber/kraken/lib/observability"
 	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
+	"github.com/uber/kraken/utils/closers"
+)
+
+var (
+	_verifyDigestDurationBuckets = append(
+		tally.DurationBuckets{0},
+		tally.MustMakeExponentialDurationBuckets(10*time.Millisecond, 2, 14)...,
+	)
 )
 
 // CADownloadStore allows simultaneously downloading and uploading
 // content-adddressable files.
 type CADownloadStore struct {
+	config        CADownloadStoreConfig
+	stats         tally.Scope
 	backend       base.FileStore
 	downloadState base.FileState
 	cacheState    base.FileState
 	cleanup       *cleanupManager
-	readPartSize  int
-	writePartSize int
 }
 
 // NewCADownloadStore creates a new CADownloadStore.
@@ -61,12 +71,12 @@ func NewCADownloadStore(config CADownloadStoreConfig, stats tally.Scope) (*CADow
 		backend.NewFileOp().AcceptState(cacheState))
 
 	return &CADownloadStore{
+		config:        config,
+		stats:         stats,
 		backend:       backend,
 		downloadState: downloadState,
 		cacheState:    cacheState,
 		cleanup:       cleanup,
-		readPartSize:  config.ReadPartSize,
-		writePartSize: config.WritePartSize,
 	}, nil
 }
 
@@ -82,11 +92,29 @@ func (s *CADownloadStore) CreateDownloadFile(name string, length int64) error {
 
 // GetDownloadFileReadWriter returns a FileReadWriter for name.
 func (s *CADownloadStore) GetDownloadFileReadWriter(name string) (FileReadWriter, error) {
-	return s.backend.NewFileOp().AcceptState(s.downloadState).GetFileReadWriter(name, s.readPartSize, s.writePartSize)
+	return s.backend.NewFileOp().AcceptState(s.downloadState).GetFileReadWriter(name, s.config.ReadPartSize, s.config.WritePartSize)
 }
 
 // MoveDownloadFileToCache moves a download file to the cache.
 func (s *CADownloadStore) MoveDownloadFileToCache(name string) error {
+	f, err := s.backend.NewFileOp().AcceptState(s.downloadState).GetFileReader(name, s.config.ReadPartSize)
+	if err != nil {
+		if s.InCacheError(err) {
+			return os.ErrExist
+		}
+		return fmt.Errorf("get file reader: %w", err)
+	}
+	defer closers.Close(f)
+
+	size := f.Size()
+	start := time.Now()
+	err = verifyDigest(f, name, s.config.SkipHashVerification)
+	s.stats.Tagged(map[string]string{
+		"size": observability.GetSizeTag(uint64(size)),
+	}).Histogram("verify_digest_duration", _verifyDigestDurationBuckets).RecordDuration(time.Since(start))
+	if err != nil {
+		return fmt.Errorf("verify digest: %w", err)
+	}
 	return s.backend.NewFileOp().AcceptState(s.downloadState).MoveFile(name, s.cacheState)
 }
 
@@ -158,7 +186,7 @@ func (s *CADownloadStore) Any() *CADownloadStoreScope {
 
 // GetFileReader returns a reader for name.
 func (a *CADownloadStoreScope) GetFileReader(name string) (FileReader, error) {
-	return a.op.GetFileReader(name, a.store.readPartSize)
+	return a.op.GetFileReader(name, a.store.config.ReadPartSize)
 }
 
 // GetFileStat returns file info for name.
