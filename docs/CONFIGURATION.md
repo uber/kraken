@@ -268,12 +268,8 @@ Two backends read from an existing Docker registry. Both are read-only: uploads 
 Both backends have three configuration fields:
 
 - `address`: registry host and port.
-- `timeout`: timeout for `registry_blob` downloads, 60s by default. It currently does not apply to `registry_blob` stat requests or `registry_tag` requests.
-- `security`: TLS and authentication settings:
-  - `tls.client`: TLS client settings. `disabled: true` turns off TLS and authentication for this backend, as in the local example below.
-  - `basic`: `username` and `password` for basic auth.
-  - `credsStore`: name of a Docker credential helper, for example `ecr-login`.
-  - `enableHTTPFallback`: fall back to plain HTTP when HTTPS fails. Off by default.
+- `timeout`: timeout for `registry_blob` downloads, 60s by default. It currently only applies to `registry_blob` download requests.
+- `security`: a `security.Config` with the TLS and authentication settings for the registry, as shown in the example below.
 
 For example, a `security` block using basic authentication:
 
