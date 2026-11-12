@@ -326,4 +326,8 @@ kubecluster:
 
 .PHONY: docs
 docs:
-	@./scripts/mkdocs.sh -q serve
+	@./scripts/mkdocs_venv.sh -q serve
+
+.PHONY: docs-build
+docs-build:
+	@./scripts/mkdocs_venv.sh build --strict

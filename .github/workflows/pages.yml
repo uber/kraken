@@ -5,15 +5,21 @@ on:
     branches: [master]
     paths:
       - 'docs/**'
+      - 'assets/**'
+      - 'README.md'
       - 'mkdocs.yml'
       - 'requirements-docs.txt'
+      - 'scripts/mkdocs_hooks.py'
       - '.github/workflows/pages.yml'
   pull_request:
     branches: [master]
     paths:
       - 'docs/**'
+      - 'assets/**'
+      - 'README.md'
       - 'mkdocs.yml'
       - 'requirements-docs.txt'
+      - 'scripts/mkdocs_hooks.py'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
