@@ -361,16 +361,13 @@ func TestExponentialBackOffConfigBuildStartsAtInitialInterval(t *testing.T) {
 	}.Build()
 
 	first := b.NextBackOff()
-	require.GreaterOrEqual(first, 45*time.Millisecond)
-	require.LessOrEqual(first, 55*time.Millisecond)
+	require.InDelta(50*time.Millisecond, first, float64(5*time.Millisecond))
 }
 
 func TestSendDoesNotResetCallerBackoff(t *testing.T) {
 	require := require.New(t)
 
-	// Send no longer resets the backoff it is given: callers either build a fresh
-	// one per request or reset it themselves. An exhausted backoff must therefore
-	// stop the retry loop immediately instead of being silently revived.
+	// An exhausted backoff stops the retry loop instead of being revived.
 	b := ExponentialBackOffConfig{
 		Enabled:             true,
 		InitialInterval:     50 * time.Millisecond,
