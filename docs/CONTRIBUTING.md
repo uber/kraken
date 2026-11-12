@@ -61,15 +61,15 @@ The website uses MkDocs and GitHub Pages at
 To preview the site from the repository root:
 
 ```sh
-python3 -m venv venv
-. venv/bin/activate
-python -m pip install -r requirements-docs.txt
-mkdocs serve
+make docs
 ```
 
-Run `mkdocs build --strict` before you submit documentation changes.
+Run `make docs-build` before you submit documentation changes.
 The build checks links between documentation pages and local files.
 It writes the website to `site/`.
+
+Both commands run in venv. To run MkDocs without venv, use `mkdocs serve` or
+`mkdocs build --strict`.
 
 The `Documentation website` workflow builds documentation changes in PRs.
 It deploys changes from `master` only. PRs and forks cannot deploy this site.
