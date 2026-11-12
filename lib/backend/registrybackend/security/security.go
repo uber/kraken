@@ -21,6 +21,7 @@ import (
 
 	"github.com/awslabs/amazon-ecr-credential-helper/ecr-login"
 	"github.com/awslabs/amazon-ecr-credential-helper/ecr-login/api"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 
@@ -156,6 +157,7 @@ func (a *authenticator) updateChallenge() error {
 	if err != nil {
 		return err
 	}
+	defer closers.Close(resp.Body)
 	versions := auth.APIVersions(resp, registryVersionHeader)
 	for _, version := range versions {
 		if version == v2Version {
