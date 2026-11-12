@@ -11,3 +11,8 @@ nav:
   - 'Style Guide': STYLEGUIDE.md
   - Roadmap: ROADMAP.md
 theme: readthedocs
+hooks:
+  - scripts/mkdocs_hooks.py
+watch:
+  - README.md
+  - assets
