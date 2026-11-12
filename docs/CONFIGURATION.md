@@ -260,6 +260,28 @@ Example origin config that uses multiple backends:
 
 ## Read-Only Registry Backend
 
+Two backends read from an existing Docker registry. Both are read-only: uploads and listing return "not supported", so push images to the registry directly.
+
+- `registry_blob` (used by origin) downloads a blob from `<address>/v2/<namespace>/blobs/sha256:<digest>`, and tries the `manifests` endpoint for the same digest only if the blob lookup returns HTTP 404. The namespace of the request is used as the repository name, so it has to match the repository name on the registry.
+- `registry_tag` (used by build-index) resolves a tag with `<address>/v2/<repo>/manifests/<tag>`. Tag names must be in `repo:tag` form.
+
+Both backends have three configuration fields:
+
+- `address`: registry host and port.
+- `timeout`: timeout for `registry_blob` downloads, 60s by default. It currently only applies to `registry_blob` download requests.
+- `security`: a `security.Config` with the TLS and authentication settings for the registry, as shown in the example below.
+
+For example, a `security` block using basic authentication:
+
+```yaml
+security:
+  basic:
+    username: <username>
+    password: <password>
+```
+
+Authentication is only attempted when `basic` or `credsStore` is set. It handles both basic auth and token challenges.
+
 For simple local testing with an insecure registry (assuming it listens on `host.docker.internal:5000`), you can configure the backend for origin and build-index accordingly:
 
 >origin.yaml
