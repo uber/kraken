@@ -382,5 +382,5 @@ func TestNameNodeBackOffStartsAtInitialInterval(t *testing.T) {
 	// Reset the first retry would sleep for ~0 instead of the configured 2s.
 	b := (&client{}).nameNodeBackOff()
 	first := b.NextBackOff()
-	require.InDelta(1900*time.Millisecond, first, float64(200*time.Millisecond))
+	require.InDelta(2000*time.Millisecond, first, float64(100*time.Millisecond))
 }
