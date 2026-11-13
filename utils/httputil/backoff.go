@@ -45,6 +45,12 @@ func (c ExponentialBackOffConfig) Build() backoff.BackOff {
 			MaxInterval:         c.MaxInterval,
 			Clock:               backoff.SystemClock,
 		}
+		// Building the struct directly leaves currentInterval at zero, so the
+		// first NextBackOff would return ~0 and only the second retry would use
+		// InitialInterval. Reset here so every backoff from config starts at the
+		// configured interval. Callers build a new backoff per request, so this
+		// does not imply that one instance may be shared across calls.
+		b.Reset()
 		return backoff.WithMaxRetries(b, c.MaxRetries)
 	}
 	return &backoff.StopBackOff{}
