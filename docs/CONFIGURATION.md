@@ -273,14 +273,15 @@ Both backends have three configuration fields:
 
 For example, a `security` block using basic authentication:
 
-```yaml
-security:
-  basic:
-    username: <username>
-    password: <password>
-```
+>origin.yaml/build-index.yaml
+>```yaml
+>security:
+>  basic:
+>    username: <username>
+>    password: <password>
+>```
 
-Authentication is only attempted when `basic` or `credsStore` is set. It handles both basic auth and token challenges.
+Authentication is only attempted when `basic` or `credsStore` is set, and TLS is not disabled (tls.client.disabled). It handles both basic auth and token challenges.
 
 For simple local testing with an insecure registry (assuming it listens on `host.docker.internal:5000`), you can configure the backend for origin and build-index accordingly:
 
