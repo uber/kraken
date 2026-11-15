@@ -505,6 +505,33 @@ func (s *CAStore) GetCacheFileStat(name string) (os.FileInfo, error) {
 	return s.cacheStore.GetCacheFileStat(name)
 }
 
+// DeleteCacheFile overrides cacheStore.DeleteCacheFile to also remove the entry
+// from the memory cache and the drain queue, so it is not written to disk later.
+func (s *CAStore) DeleteCacheFile(name string) error {
+	if s.memCache == nil {
+		return s.cacheStore.DeleteCacheFile(name)
+	}
+
+	s.drain.mu.Lock()
+	for e := s.drain.queue.Front(); e != nil; {
+		next := e.Next()
+		if item, ok := e.Value.(*drainItem); ok && item.entry.Name == name {
+			s.drain.queue.Remove(e)
+		}
+		e = next
+	}
+	s.drain.mu.Unlock()
+
+	inMem := s.memCache.Get(name) != nil
+	s.memCache.Remove(name)
+
+	err := s.cacheStore.DeleteCacheFile(name)
+	if inMem && os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
 // ListCacheFiles overrides cacheStore.ListCacheFiles to include memory cache entries.
 func (s *CAStore) ListCacheFiles() ([]string, error) {
 	diskFiles, err := s.cacheStore.ListCacheFiles()

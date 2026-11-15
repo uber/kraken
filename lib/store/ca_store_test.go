@@ -1337,6 +1337,78 @@ func TestCAStore_ListCacheFiles(t *testing.T) {
 	}
 }
 
+func TestCAStore_DeleteCacheFile(t *testing.T) {
+	newStore := func(t *testing.T, memEnabled bool) *CAStore {
+		config := CAStoreConfig{
+			UploadDir: t.TempDir(),
+			CacheDir:  t.TempDir(),
+			MemoryCache: MemoryCacheConfig{
+				Enabled:         memEnabled,
+				MaxSize:         1024 * 1024,
+				DrainWorkers:    1,
+				DrainMaxRetries: 3,
+				TTL:             time.Hour,
+			},
+		}
+		// The mock clock is never advanced, so drain workers never tick.
+		cas, err := newCAStore(config, tally.NoopScope, clock.NewMock())
+		require.NoError(t, err)
+		t.Cleanup(cas.Close)
+		return cas
+	}
+
+	t.Run("memory-only entry is removed and not drained to disk", func(t *testing.T) {
+		require := require.New(t)
+		cas := newStore(t, true)
+		blob := core.SizedBlobFixture(1024, 256)
+		name := blob.Digest.Hex()
+
+		require.NoError(cas.WriteBlobToCacheWithMetaInfo(
+			name, uint64(len(blob.Content)),
+			func(w FileReadWriter) error {
+				_, err := w.Write(blob.Content)
+				return err
+			}, 256))
+		require.True(cas.CheckInMemCache(name))
+
+		require.NoError(cas.DeleteCacheFile(name))
+
+		require.False(cas.CheckInMemCache(name))
+		cas.drainNext()
+		_, err := cas.GetCacheFileStat(name)
+		require.True(os.IsNotExist(err), "got %v", err)
+		files, err := cas.ListCacheFiles()
+		require.NoError(err)
+		require.NotContains(files, name)
+	})
+
+	t.Run("disk-only entry is deleted", func(t *testing.T) {
+		require := require.New(t)
+		cas := newStore(t, true)
+		blob := core.SizedBlobFixture(1024, 256)
+		name := blob.Digest.Hex()
+
+		require.NoError(cas.CreateCacheFile(name, bytes.NewReader(blob.Content)))
+
+		require.NoError(cas.DeleteCacheFile(name))
+
+		_, err := cas.GetCacheFileStat(name)
+		require.True(os.IsNotExist(err), "got %v", err)
+	})
+
+	t.Run("missing entry still returns not-exist", func(t *testing.T) {
+		cas := newStore(t, true)
+		err := cas.DeleteCacheFile(core.DigestFixture().Hex())
+		require.True(t, os.IsNotExist(err), "got %v", err)
+	})
+
+	t.Run("memory cache disabled", func(t *testing.T) {
+		cas := newStore(t, false)
+		err := cas.DeleteCacheFile(core.DigestFixture().Hex())
+		require.True(t, os.IsNotExist(err), "got %v", err)
+	})
+}
+
 func TestGetCacheFileMetadata_MemoryCache_NoCopy(t *testing.T) {
 	require := require.New(t)
 
