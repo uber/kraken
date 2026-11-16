@@ -85,6 +85,9 @@ func (c *client) nameNodeBackOff() backoff.BackOff {
 		MaxInterval:         30 * time.Second,
 		Clock:               backoff.SystemClock,
 	}
+	// Reset so the first failover retry waits InitialInterval instead of the ~0
+	// that a directly-constructed ExponentialBackOff returns on its first call.
+	b.Reset()
 	return backoff.WithMaxRetries(b, 5)
 }
 

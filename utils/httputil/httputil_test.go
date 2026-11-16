@@ -319,3 +319,74 @@ func TestParseDigestInvalid(t *testing.T) {
 	_, err := ParseDigest(r, "digest")
 	require.Error(err)
 }
+
+func TestSendRetryHonorsBuiltBackoffIntervals(t *testing.T) {
+	require := require.New(t)
+
+	// A backoff built the way production builds it starts at InitialInterval, so
+	// one Send covers two ~50ms retries.
+	b := ExponentialBackOffConfig{
+		Enabled:             true,
+		InitialInterval:     50 * time.Millisecond,
+		Multiplier:          1,
+		MaxInterval:         50 * time.Millisecond,
+		RandomizationFactor: 0.05,
+		MaxRetries:          2,
+	}.Build()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	start := time.Now()
+	_, err := Get(srv.URL, SendRetry(RetryBackoff(b)))
+	require.Error(err)
+	require.GreaterOrEqual(time.Since(start), 80*time.Millisecond)
+}
+
+func TestExponentialBackOffConfigBuildStartsAtInitialInterval(t *testing.T) {
+	require := require.New(t)
+
+	// Constructing ExponentialBackOff directly leaves currentInterval at zero, so
+	// the first NextBackOff would return ~0. Build must hand back a backoff whose
+	// first delay is already InitialInterval.
+	b := ExponentialBackOffConfig{
+		Enabled:             true,
+		InitialInterval:     50 * time.Millisecond,
+		Multiplier:          2,
+		MaxInterval:         time.Second,
+		RandomizationFactor: 0.05,
+		MaxRetries:          3,
+	}.Build()
+
+	first := b.NextBackOff()
+	require.InDelta(50*time.Millisecond, first, float64(5*time.Millisecond))
+}
+
+func TestSendDoesNotResetCallerBackoff(t *testing.T) {
+	require := require.New(t)
+
+	// An exhausted backoff stops the retry loop instead of being revived.
+	b := ExponentialBackOffConfig{
+		Enabled:             true,
+		InitialInterval:     50 * time.Millisecond,
+		Multiplier:          1,
+		MaxInterval:         50 * time.Millisecond,
+		RandomizationFactor: 0.05,
+		MaxRetries:          2,
+	}.Build()
+	for i := 0; i < 3; i++ {
+		b.NextBackOff() // spend the two retries and hit backoff.Stop
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	start := time.Now()
+	_, err := Get(srv.URL, SendRetry(RetryBackoff(b)))
+	require.Error(err)
+	require.Less(time.Since(start), 80*time.Millisecond)
+}

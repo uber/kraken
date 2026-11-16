@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/log"
@@ -372,4 +373,14 @@ func TestClientListFileStatus(t *testing.T) {
 		Type:       "FILE",
 		Length:     24930,
 	}}, result)
+}
+
+func TestNameNodeBackOffStartsAtInitialInterval(t *testing.T) {
+	require := require.New(t)
+
+	// nameNodeBackOff builds the ExponentialBackOff struct directly; without a
+	// Reset the first retry would sleep for ~0 instead of the configured 2s.
+	b := (&client{}).nameNodeBackOff()
+	first := b.NextBackOff()
+	require.InDelta(2000*time.Millisecond, first, float64(100*time.Millisecond))
 }

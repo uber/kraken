@@ -18,12 +18,15 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend/backenderrors"
 	"github.com/uber/kraken/utils/closers"
+	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/memsize"
 	"github.com/uber/kraken/utils/randutil"
 	"github.com/uber/kraken/utils/testutil"
@@ -136,4 +139,37 @@ func TestDownloadMalformedURLThrowsError(t *testing.T) {
 
 	var b bytes.Buffer
 	require.Error(client.Download(core.NamespaceFixture(), "data", &b))
+}
+
+func TestDownloadBuildsBackoffPerRequest(t *testing.T) {
+	require := require.New(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(Config{
+		DownloadURL: srv.URL + "/%s",
+		DownloadBackOff: httputil.ExponentialBackOffConfig{
+			Enabled:             true,
+			InitialInterval:     50 * time.Millisecond,
+			Multiplier:          1,
+			MaxInterval:         50 * time.Millisecond,
+			RandomizationFactor: 0.05,
+			MaxRetries:          2,
+		},
+	}, tally.NoopScope)
+	require.NoError(err)
+
+	// Download builds its own backoff on every call, so a second request must not
+	// inherit the first one's exhausted state.
+	var elapsed [2]time.Duration
+	for i := range elapsed {
+		start := time.Now()
+		require.Error(c.Download("ns", "blob", io.Discard))
+		elapsed[i] = time.Since(start)
+	}
+	require.GreaterOrEqual(elapsed[0], 80*time.Millisecond)
+	require.GreaterOrEqual(elapsed[1], 80*time.Millisecond)
 }
