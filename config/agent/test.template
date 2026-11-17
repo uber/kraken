@@ -8,7 +8,7 @@ peer_id_factory: random
 
 container_runtime:
   docker:
-    docker_version: "1.24"
+    docker_version: "1.40"
 
 tracker:
   hosts:
