@@ -38,6 +38,16 @@ func TestAttachPortIfMissing(t *testing.T) {
 	require.Equal(t, stringset.New("x:7", "y:5", "z:7"), addrs)
 }
 
+func TestAttachPortIfMissingIPv6(t *testing.T) {
+	addrs, err := attachPortIfMissing(
+		stringset.New("::1", "2001:db8::10", "10.0.0.1", "[2001:db8::11]:5"), 7)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		stringset.New("[::1]:7", "[2001:db8::10]:7", "10.0.0.1:7", "[2001:db8::11]:5"),
+		addrs)
+}
+
 func TestAttachPortIfMissingError(t *testing.T) {
 	_, err := attachPortIfMissing(stringset.New("a:b:c"), 7)
 	require.Error(t, err)

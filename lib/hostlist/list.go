@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -167,14 +168,12 @@ func getLocalNames() (stringset.Set, error) {
 func attachPortIfMissing(names stringset.Set, port int) (stringset.Set, error) {
 	result := make(stringset.Set)
 	for name := range names {
-		parts := strings.Split(name, ":")
-		switch len(parts) {
-		case 1:
-			// Name is in 'host' format -- attach port.
-			name = fmt.Sprintf("%s:%d", parts[0], port)
-		case 2:
-			// No-op, name is already in "ip:port" format.
-		default:
+		if _, _, err := net.SplitHostPort(name); err == nil {
+			// No-op, name is already in "host:port" format.
+		} else if !strings.Contains(name, ":") || net.ParseIP(name) != nil {
+			// Name is a host or a bare IPv4 / IPv6 address -- attach port.
+			name = net.JoinHostPort(name, strconv.Itoa(port))
+		} else {
 			return nil, fmt.Errorf("invalid name format: %s, expected 'host' or 'ip:port'", name)
 		}
 		result.Add(name)
