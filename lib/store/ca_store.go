@@ -49,10 +49,16 @@ type drainItem struct {
 	entry   *cache.MemoryEntry
 	retries int
 	errs    []error
+	// cancelled is set under drain.mu by DeleteCacheFile while the item is
+	// being written, telling the worker to discard the write.
+	cancelled bool
 }
 
 type drain struct {
-	queue     *list.List
+	queue *list.List
+	// inflight holds the items workers have dequeued but not finished,
+	// so DeleteCacheFile can cancel them. Guarded by mu, like queue.
+	inflight  map[string]*drainItem
 	mu        sync.Mutex
 	stopChan  chan struct{}
 	wg        sync.WaitGroup
@@ -144,6 +150,7 @@ func startDrainWorkers(cas *CAStore) {
 		histogram: cas.stats.Histogram("drain_duration", drainDurationBuckets),
 		stopChan:  make(chan struct{}),
 		queue:     list.New(),
+		inflight:  make(map[string]*drainItem),
 	}
 	for range cas.config.MemoryCache.DrainWorkers {
 		cas.drain.wg.Add(1)
@@ -279,17 +286,18 @@ func (s *CAStore) addToMemoryCache(
 		CreatedAt: s.clk.Now(),
 	}
 
+	// Add and enqueue under one lock so DeleteCacheFile never sees the entry
+	// in memory without its queued write.
+	s.drain.mu.Lock()
 	if added := s.memCache.Add(entry); !added {
+		s.drain.mu.Unlock()
 		// Multiple goroutines are trying to add the same blob (which should never happen).
 		return fmt.Errorf("entry already in in-memory cache")
 	}
+	s.drain.queue.PushBack(&drainItem{entry: entry})
+	s.drain.mu.Unlock()
 
 	log.With("name", name, "size", entry.Size(), "cap", cap(data)).Debug("successfully added to cache")
-
-	s.addItemForDiskSync(&drainItem{
-		entry:   entry,
-		retries: 0,
-	})
 	return nil
 }
 
@@ -410,7 +418,24 @@ func (s *CAStore) dequeueNextDrainItem() *drainItem {
 		// Shouldn't happen, but good to check
 		return nil
 	}
+	s.drain.inflight[item.entry.Name] = item
 	return item
+}
+
+// finishDrainItem ends the in-flight tracking of item and reports whether a
+// DeleteCacheFile cancelled it. If retry is non-nil and item was not
+// cancelled, retry is enqueued atomically with the tracking change.
+func (s *CAStore) finishDrainItem(item, retry *drainItem) (cancelled bool) {
+	s.drain.mu.Lock()
+	defer s.drain.mu.Unlock()
+	delete(s.drain.inflight, item.entry.Name)
+	if item.cancelled {
+		return true
+	}
+	if retry != nil {
+		s.drain.queue.PushBack(retry)
+	}
+	return false
 }
 
 func (s *CAStore) drainNext() {
@@ -418,17 +443,29 @@ func (s *CAStore) drainNext() {
 	if item == nil {
 		return
 	}
+	s.drainItem(item)
+}
 
+func (s *CAStore) drainItem(item *drainItem) {
 	err := s.writeDrainItemToDisk(item.entry)
-	if err != nil {
-		if item.retries < s.config.MemoryCache.DrainMaxRetries {
-			s.addItemForDiskSync(&drainItem{
-				entry:   item.entry,
-				retries: item.retries + 1,
-				errs:    append(item.errs, err),
-			})
-			return
+	var retry *drainItem
+	if err != nil && item.retries < s.config.MemoryCache.DrainMaxRetries {
+		retry = &drainItem{
+			entry:   item.entry,
+			retries: item.retries + 1,
+			errs:    append(item.errs, err),
 		}
+	}
+	if s.finishDrainItem(item, retry) {
+		// DeleteCacheFile removed the memory entry while we were writing;
+		// undo whatever reached disk. A failure here is not actionable.
+		_ = s.cacheStore.DeleteCacheFile(item.entry.Name)
+		return
+	}
+	if retry != nil {
+		return
+	}
+	if err != nil {
 		s.memCache.Remove(item.entry.Name)
 		s.stats.Counter("drain_error").Inc(1)
 		log.With("name", item.entry.Name, "drain_errors", errors.Join(append(item.errs, err)...)).
@@ -506,12 +543,21 @@ func (s *CAStore) GetCacheFileStat(name string) (os.FileInfo, error) {
 }
 
 // DeleteCacheFile overrides cacheStore.DeleteCacheFile to also remove the entry
-// from the memory cache and the drain queue, so it is not written to disk later.
+// from the memory cache, its queued writes, and cancel a write a drain worker
+// is performing right now, so the blob is not written to disk later.
+//
+// The memory entry and queued writes are dropped before the disk delete, so if
+// the disk delete fails (e.g. base.ErrFilePersisted) the call returns an error
+// but the in-memory copy is already gone. A persisted blob is still on disk;
+// for any other failure the caller is expected to retry the delete.
 func (s *CAStore) DeleteCacheFile(name string) error {
 	if s.memCache == nil {
 		return s.cacheStore.DeleteCacheFile(name)
 	}
 
+	// Everything that touches the queue, in-flight set and memory entry
+	// happens under drain.mu, so the in-memory check-and-remove is atomic
+	// with respect to other deletes, enqueues and drain workers.
 	s.drain.mu.Lock()
 	for e := s.drain.queue.Front(); e != nil; {
 		next := e.Next()
@@ -520,10 +566,11 @@ func (s *CAStore) DeleteCacheFile(name string) error {
 		}
 		e = next
 	}
+	if item, ok := s.drain.inflight[name]; ok {
+		item.cancelled = true
+	}
+	inMem := s.memCache.Pop(name)
 	s.drain.mu.Unlock()
-
-	inMem := s.memCache.Get(name) != nil
-	s.memCache.Remove(name)
 
 	err := s.cacheStore.DeleteCacheFile(name)
 	if inMem && os.IsNotExist(err) {
