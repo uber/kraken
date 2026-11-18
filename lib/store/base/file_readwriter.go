@@ -148,6 +148,11 @@ func (readWriter localFileReadWriter) Seek(offset int64, whence int) (int64, err
 	return readWriter.descriptor.Seek(offset, whence)
 }
 
+// Truncate changes the size of the file to size.
+func (readWriter localFileReadWriter) Truncate(size int64) error {
+	return readWriter.descriptor.Truncate(size)
+}
+
 // Size returns the size of the file.
 func (readWriter localFileReadWriter) Size() int64 {
 	// Use file entry instead of descriptor, because descriptor could have been closed.

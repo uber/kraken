@@ -262,12 +262,12 @@ func (c *clusterClient) DownloadBlob(ctx context.Context, namespace string, d co
 
 	w := newRestartableWriter(dst)
 	err := Poll(c.resolver, c.defaultPollBackOff(), d, func(client Client) error {
-		if w.rewind != nil {
+		if w.rewind != nil && w.written > 0 {
 			if err := w.rewind(); err != nil {
 				return &stopPollError{fmt.Errorf("rewind download destination: %w", err)}
 			}
+			w.written = 0
 		}
-		w.written = 0
 
 		err := client.DownloadBlob(ctx, namespace, d, w)
 		// A failed attempt may have written part of the blob to dst. Only try
@@ -376,6 +376,12 @@ type stopPollError struct {
 
 func (e *stopPollError) Error() string { return e.err.Error() }
 
+// truncater is a destination that can drop a partial write by truncating at an
+// offset, as a file can.
+type truncater interface {
+	Truncate(size int64) error
+}
+
 // restartableWriter is the io.Writer handed to a single origin download. When
 // dst can be rewound it discards the data written by a failed attempt, so
 // retrying on another origin does not append to a partially written blob.
@@ -403,7 +409,7 @@ func newRestartableWriter(dst io.Writer) *restartableWriter {
 			if _, err := d.Seek(start, io.SeekStart); err != nil {
 				return err
 			}
-			if t, ok := dst.(interface{ Truncate(int64) error }); ok {
+			if t, ok := dst.(truncater); ok {
 				return t.Truncate(start)
 			}
 			return nil
