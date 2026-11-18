@@ -137,10 +137,10 @@ func (e NetworkError) Error() string {
 	return fmt.Sprintf("network error: %s", e.err)
 }
 
-// IsNetworkError returns true if err is a NetworkError.
+// IsNetworkError returns true if err is or wraps a NetworkError.
 func IsNetworkError(err error) bool {
-	_, ok := err.(NetworkError)
-	return ok
+	var networkErr NetworkError
+	return errors.As(err, &networkErr)
 }
 
 type sendOptions struct {

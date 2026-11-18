@@ -390,3 +390,13 @@ func TestSendDoesNotResetCallerBackoff(t *testing.T) {
 	require.Error(err)
 	require.Less(time.Since(start), 80*time.Millisecond)
 }
+
+func TestIsNetworkError(t *testing.T) {
+	require.False(t, IsNetworkError(nil))
+	require.True(t, IsNetworkError(NetworkError{errors.New("boom")}))
+
+	// Errors are wrapped on their way up from the origin cluster, so the
+	// wrapped form has to be recognized too.
+	require.True(t, IsNetworkError(fmt.Errorf("origin %s: %w", "addr", NetworkError{errors.New("boom")})))
+	require.False(t, IsNetworkError(fmt.Errorf("origin %s: %w", "addr", StatusError{Status: 500})))
+}
