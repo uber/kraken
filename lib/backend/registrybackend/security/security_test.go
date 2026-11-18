@@ -59,11 +59,11 @@ func TestUpdateChallengeClosesResponseBody(t *testing.T) {
 		desc    string
 		status  int
 		version string
-		wantErr bool
+		wantErr string
 	}{
-		{"ok v2", http.StatusOK, "registry/2.0", false},
-		{"unauthorized v2", http.StatusUnauthorized, "registry/2.0", false},
-		{"not v2", http.StatusOK, "", true},
+		{"ok v2", http.StatusOK, "registry/2.0", ""},
+		{"unauthorized v2", http.StatusUnauthorized, "registry/2.0", ""},
+		{"not v2", http.StatusOK, "", "registry is not v2"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
@@ -78,8 +78,8 @@ func TestUpdateChallengeClosesResponseBody(t *testing.T) {
 
 			for i := 0; i < 3; i++ {
 				err := a.updateChallenge()
-				if tt.wantErr {
-					require.Error(err)
+				if tt.wantErr != "" {
+					require.ErrorContains(err, tt.wantErr)
 				} else {
 					require.NoError(err)
 				}
