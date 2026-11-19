@@ -15,6 +15,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,7 +31,6 @@ import (
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/dockerutil"
-	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/log"
 )
 
@@ -66,7 +66,7 @@ func PullImage(source, repo, tag string, useDocker bool) error {
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	var errs errutil.MultiError
+	var errs []error
 	for _, desc := range manifest.References() {
 		wg.Add(1)
 		go func() {
@@ -83,7 +83,7 @@ func PullImage(source, repo, tag string, useDocker bool) error {
 	wg.Wait()
 
 	if errs != nil {
-		return fmt.Errorf("failed to pull image %s:%s: %s", repo, tag, errs)
+		return fmt.Errorf("failed to pull image %s:%s: %s", repo, tag, errors.Join(errs...))
 	}
 
 	log.Infof("finished pulling image %s:%s in %v", repo, tag, time.Since(t).Seconds())

@@ -16,6 +16,7 @@ package blobserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,7 +44,6 @@ import (
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/closers"
-	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/listener"
@@ -571,7 +571,7 @@ func (s *Server) applyToReplicas(d core.Digest, f func(i int, c blobclient.Clien
 	}
 	wg.Wait()
 
-	return errutil.Join(errs)
+	return errors.Join(errs...)
 }
 
 // downloadBlob downloads blob for d into dst. If no blob exists under d, a

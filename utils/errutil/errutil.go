@@ -20,6 +20,8 @@ import "bytes"
 //
 // XXX: Don't initialize errors as MultiError unless you know what you're doing!
 // See https://golang.org/doc/faq#nil_error for more details.
+//
+// Deprecated: Use errors.Join from the standard library instead.
 type MultiError []error
 
 func (e MultiError) Error() string {
@@ -34,6 +36,8 @@ func (e MultiError) Error() string {
 }
 
 // Join converts errs into an error interface.
+//
+// Deprecated: Use errors.Join from the standard library instead.
 func Join(errs []error) error {
 	if errs == nil {
 		return nil

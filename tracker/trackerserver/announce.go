@@ -15,12 +15,12 @@ package trackerserver
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/tracker/announceclient"
-	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/handler"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
@@ -109,7 +109,7 @@ func (s *Server) getPeerHandout(
 	}
 	peers = append(peers, origins...)
 	if len(peers) == 0 {
-		return nil, handler.Errorf("no peers available: %s", errutil.Join(errs))
+		return nil, handler.Errorf("no peers available: %s", errors.Join(errs...))
 	}
 	return s.policy.SortPeers(peer, peers), nil
 }

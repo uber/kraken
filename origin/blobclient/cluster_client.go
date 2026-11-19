@@ -28,7 +28,6 @@ import (
 	"github.com/uber/kraken/core"
 	"github.com/uber/kraken/lib/backend"
 	"github.com/uber/kraken/lib/hostlist"
-	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/log"
 
@@ -241,7 +240,7 @@ func (c *clusterClient) OverwriteMetaInfo(d core.Digest, pieceLength int64) erro
 			errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
 		}
 	}
-	return errutil.Join(errs)
+	return errors.Join(errs...)
 }
 
 // DownloadBlob pulls a blob from the origin cluster.
@@ -329,7 +328,7 @@ func (c *clusterClient) Owners(d core.Digest) ([]core.PeerContext, error) {
 	}
 	wg.Wait()
 
-	err = errutil.Join(errs)
+	err = errors.Join(errs...)
 
 	if len(peers) == 0 {
 		if err != nil {
@@ -399,5 +398,5 @@ ORIGINS:
 		errs = append(errs,
 			fmt.Errorf("origin %s: backoff timed out on 202 responses", client.Addr()))
 	}
-	return fmt.Errorf("all origins unavailable: %s", errutil.Join(errs))
+	return fmt.Errorf("all origins unavailable: %s", errors.Join(errs...))
 }

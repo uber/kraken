@@ -862,6 +862,27 @@ func TestClusterClientOwners(t *testing.T) {
 	}
 }
 
+// TestClusterClientOwnersAllFailWrapsErrors verifies that the error returned
+// when every origin fails wraps each origin's error.
+func TestClusterClientOwnersAllFailWrapsErrors(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	err1 := errors.New("origin 1 failed")
+	err2 := errors.New("origin 2 failed")
+
+	resolver := mockblobclient.NewMockClientResolver(ctrl)
+	client1 := mockblobclient.NewMockClient(ctrl)
+	client2 := mockblobclient.NewMockClient(ctrl)
+	resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
+	client1.EXPECT().GetPeerContext().Return(core.PeerContext{}, err1)
+	client2.EXPECT().GetPeerContext().Return(core.PeerContext{}, err2)
+
+	_, err := blobclient.NewClusterClient(resolver).Owners(core.DigestFixture())
+	require.ErrorIs(t, err, err1)
+	require.ErrorIs(t, err, err2)
+}
+
 // TestClusterClientDownloadBlob verifies that DownloadBlob correctly downloads
 // blob data from origin servers with proper error handling.
 func TestClusterClientDownloadBlob(t *testing.T) {

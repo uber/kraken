@@ -14,6 +14,7 @@
 package originstore
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/uber/kraken/lib/hostlist"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/dedup"
-	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/log"
 
 	"github.com/andres-erbsen/clock"
@@ -85,7 +85,7 @@ func (s *store) GetOrigins(d core.Digest) ([]*core.PeerInfo, error) {
 		}
 	}
 	if len(origins) == 0 {
-		return nil, allUnavailableError{fmt.Errorf("all origins unavailable: %s", errutil.Join(errs))}
+		return nil, allUnavailableError{fmt.Errorf("all origins unavailable: %s", errors.Join(errs...))}
 	}
 	return origins, nil
 }
