@@ -60,7 +60,7 @@ func TestDefaultPolicySelectsPiecesUniformly(t *testing.T) {
 
 			// Every piece should be selected in limit/numPieces of the trials.
 			// The allowed deviation is at least 8 standard deviations.
-			expected := float64(trials * test.limit / test.numPieces)
+			expected := float64(trials*test.limit) / float64(test.numPieces)
 			for piece, count := range counts {
 				require.InDelta(expected, count, 0.1*expected, "piece %d", piece)
 			}
