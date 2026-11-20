@@ -392,11 +392,21 @@ func TestSendDoesNotResetCallerBackoff(t *testing.T) {
 }
 
 func TestIsNetworkError(t *testing.T) {
-	require.False(t, IsNetworkError(nil))
-	require.True(t, IsNetworkError(NetworkError{errors.New("boom")}))
-
-	// Errors are wrapped on their way up from the origin cluster, so the
-	// wrapped form has to be recognized too.
-	require.True(t, IsNetworkError(fmt.Errorf("origin %s: %w", "addr", NetworkError{errors.New("boom")})))
-	require.False(t, IsNetworkError(fmt.Errorf("origin %s: %w", "addr", StatusError{Status: 500})))
+	tests := []struct {
+		name           string
+		giveErr        error
+		wantNetworkErr bool
+	}{
+		{"nil", nil, false},
+		{"bare network error", NetworkError{errors.New("boom")}, true},
+		// Errors are wrapped on their way up from the origin cluster, so the
+		// wrapped form has to be recognized too.
+		{"wrapped network error", fmt.Errorf("origin %s: %w", "addr", NetworkError{errors.New("boom")}), true},
+		{"wrapped status error", fmt.Errorf("origin %s: %w", "addr", StatusError{Status: 500}), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.wantNetworkErr, IsNetworkError(tt.giveErr))
+		})
+	}
 }
