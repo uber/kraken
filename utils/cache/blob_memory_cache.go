@@ -103,6 +103,22 @@ func (c *BlobMemoryCache) Get(name string) *MemoryEntry {
 	return entry
 }
 
+// Pop atomically removes an entry and reports whether it was present. Unlike
+// Get followed by Remove, it does not touch the get_hit/get_miss counters.
+func (c *BlobMemoryCache) Pop(name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entry, exists := c.entries[name]
+	if !exists {
+		return false
+	}
+	delete(c.entries, name)
+	c.decrementTotalSize(entry.Size(), name)
+	c.stats.Gauge("total_size_bytes").Update(float64(c.totalSize))
+	return true
+}
+
 // Remove removes an entry from the memory cache.
 // No-op if entry is not present.
 // This operation uses a write lock for exclusive access.
