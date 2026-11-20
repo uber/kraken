@@ -391,7 +391,7 @@ ORIGINS:
 						return err
 					}
 				}
-				errs = append(errs, fmt.Errorf("origin %s: %s", client.Addr(), err))
+				errs = append(errs, fmt.Errorf("origin %s: %w", client.Addr(), err))
 				continue ORIGINS
 			}
 			return nil // Success!
@@ -399,5 +399,5 @@ ORIGINS:
 		errs = append(errs,
 			fmt.Errorf("origin %s: backoff timed out on 202 responses", client.Addr()))
 	}
-	return fmt.Errorf("all origins unavailable: %s", errutil.Join(errs))
+	return fmt.Errorf("all origins unavailable: %w", errutil.Join(errs))
 }

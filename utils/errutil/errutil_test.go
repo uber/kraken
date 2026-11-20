@@ -15,6 +15,7 @@ package errutil
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -56,4 +57,14 @@ func TestJoinNonNil(t *testing.T) {
 		return Join(errs)
 	}
 	require.Error(t, f())
+}
+
+func TestMultiErrorUnwrap(t *testing.T) {
+	sentinel := errors.New("sentinel")
+	err := fmt.Errorf("outer: %w", Join([]error{
+		errors.New("other"),
+		fmt.Errorf("origin: %w", sentinel),
+	}))
+
+	require.ErrorIs(t, err, sentinel)
 }

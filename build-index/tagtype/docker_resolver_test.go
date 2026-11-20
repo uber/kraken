@@ -15,6 +15,7 @@ package tagtype
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/origin/blobclient"
 	"github.com/uber/kraken/utils/dockerutil"
+	"github.com/uber/kraken/utils/errutil"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/mockutil"
 )
@@ -301,4 +303,26 @@ func TestDockerResolver_Resolve_WithRetries(t *testing.T) {
 	require.NoError(err)
 	require.NotNil(deps)
 	require.Equal(core.DigestList(append(layers, manifest)), deps)
+}
+
+func TestDockerResolver_DownloadManifest_RetryOnWrappedNetworkError(t *testing.T) {
+	require, _, resolver, mockOrigin := setupDockerResolverTest(t)
+
+	tag := "repo/image:v1.0"
+	manifest := core.DigestFixture()
+
+	// The origin cluster client wraps the per-origin errors, so a network
+	// error reaches the resolver inside "all origins unavailable: ...".
+	networkErr := fmt.Errorf("all origins unavailable: %w",
+		errutil.Join([]error{fmt.Errorf("origin origin-1: %w", httputil.NetworkError{})}))
+
+	mockOrigin.EXPECT().
+		DownloadBlob(gomock.Any(), tag, manifest, gomock.Any()).
+		Return(networkErr).
+		Times(testMaxRetries + 1)
+
+	result, err := resolver.downloadManifest(tag, manifest)
+	require.Error(err)
+	require.Nil(result)
+	require.True(httputil.IsNetworkError(err))
 }
