@@ -18,7 +18,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"sort"
 
 	"github.com/uber/kraken/core"
 
@@ -26,8 +28,8 @@ import (
 	"github.com/uber/kraken/lib/store"
 	"github.com/uber/kraken/utils/log"
 
-	"github.com/docker/distribution/registry/storage/driver"
-	"github.com/docker/distribution/registry/storage/driver/factory"
+	"github.com/distribution/distribution/v3/registry/storage/driver"
+	"github.com/distribution/distribution/v3/registry/storage/driver/factory"
 )
 
 // The path layout in the storage backend is roughly as follows:
@@ -100,7 +102,9 @@ func getParam(params map[string]interface{}, name string) interface{} {
 	return p
 }
 
-func (factory *krakenStorageDriverFactory) Create(params map[string]interface{}) (driver.StorageDriver, error) {
+func (factory *krakenStorageDriverFactory) Create(
+	ctx context.Context,
+	params map[string]interface{}) (driver.StorageDriver, error) {
 	// Common parameters.
 	constructor, ok := getParam(params, "constructor").(string)
 	if !ok {
@@ -274,11 +278,21 @@ func (d *KrakenStorageDriver) Writer(ctx context.Context, path string, append bo
 				return nil, err
 			}
 		}
-		return w, nil
+		return fileWriter{w}, nil
 	default:
 		return nil, InvalidRequestError{path}
 	}
 }
+
+// fileWriter adapts store.FileReadWriter to driver.FileWriter, whose Cancel
+// and Commit take a context.
+type fileWriter struct {
+	store.FileReadWriter
+}
+
+func (w fileWriter) Cancel(context.Context) error { return w.FileReadWriter.Cancel() }
+
+func (w fileWriter) Commit(context.Context) error { return w.FileReadWriter.Commit() }
 
 // Stat returns fileinfo of path
 func (d *KrakenStorageDriver) Stat(ctx context.Context, path string) (driver.FileInfo, error) {
@@ -357,13 +371,50 @@ func (d *KrakenStorageDriver) Delete(ctx context.Context, path string) error {
 	}
 }
 
-// URLFor returns url for path
-func (d *KrakenStorageDriver) URLFor(ctx context.Context, path string, options map[string]interface{}) (string, error) {
-	log.Debugf("(*KrakenStorageDriver).URLFor %s", path)
-	return "", fmt.Errorf("not implemented")
+// RedirectURL returns an empty URL since redirects are not supported.
+func (d *KrakenStorageDriver) RedirectURL(r *http.Request, path string) (string, error) {
+	log.Debugf("(*KrakenStorageDriver).RedirectURL %s", path)
+	return "", nil
 }
 
-// Walk is not implemented.
-func (d *KrakenStorageDriver) Walk(ctx context.Context, path string, f driver.WalkFn) error {
-	return errors.New("walk not implemented")
+// Walk is only supported for the tags directory of a repository, which is
+// what the registry walks to list tags. Each tag is reported as a directory
+// directly under path. The start-after hint is ignored since the registry
+// filters by its own cursor.
+func (d *KrakenStorageDriver) Walk(
+	ctx context.Context,
+	path string,
+	f driver.WalkFn,
+	options ...func(*driver.WalkOptions)) error {
+
+	log.Debugf("(*KrakenStorageDriver).Walk %s", path)
+	pathType, pathSubType, err := ParsePath(path)
+	if err != nil {
+		return err
+	}
+	if pathType != _manifests || pathSubType != _tags {
+		return InvalidRequestError{path}
+	}
+	tags, err := d.manifests.list(path)
+	if err != nil {
+		return toDriverError(err, path)
+	}
+	sort.Strings(tags)
+	for _, tag := range tags {
+		err := f(driver.FileInfoInternal{
+			FileInfoFields: driver.FileInfoFields{
+				Path:  path + "/" + tag,
+				IsDir: true,
+			},
+		})
+		switch {
+		case err == nil, errors.Is(err, driver.ErrSkipDir):
+			continue
+		case errors.Is(err, driver.ErrFilledBuffer):
+			return nil
+		default:
+			return err
+		}
+	}
+	return nil
 }

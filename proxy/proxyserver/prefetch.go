@@ -13,8 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/distribution"
-	"github.com/docker/distribution/manifest/manifestlist"
+	"github.com/distribution/distribution/v3"
+	"github.com/distribution/distribution/v3/manifest/manifestlist"
+	"github.com/distribution/distribution/v3/manifest/ocischema"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/build-index/tagclient"
 	"github.com/uber/kraken/core"
@@ -344,13 +345,18 @@ func (ph *PrefetchHandler) processManifest(logger *zap.SugaredLogger, namespace 
 // getBlobInfos returns all blob infos for a manifest. For manifest lists and
 // OCI indexes, it also descends one level to collect sub-manifest blob infos.
 func (ph *PrefetchHandler) getBlobInfos(logger *zap.SugaredLogger, namespace string, manifest distribution.Manifest) ([]blobInfo, error) {
-	ml, ok := manifest.(*manifestlist.DeserializedManifestList)
-	if !ok {
+	var subManifests []distribution.Descriptor
+	switch m := manifest.(type) {
+	case *manifestlist.DeserializedManifestList:
+		subManifests = m.References()
+	case *ocischema.DeserializedImageIndex:
+		subManifests = m.References()
+	default:
 		return ph.processLayers(manifest.References())
 	}
 
 	var allBlobs []blobInfo
-	for _, subDesc := range ml.Manifests {
+	for _, subDesc := range subManifests {
 		subDigest, err := core.NewSHA256DigestFromHex(subDesc.Digest.Hex())
 		if err != nil {
 			return nil, fmt.Errorf("parse sub-manifest digest: %w", err)
