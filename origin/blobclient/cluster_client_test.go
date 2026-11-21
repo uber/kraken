@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/uber/kraken/lib/hostlist"
 	mockblobclient "github.com/uber/kraken/mocks/origin/blobclient"
 	"github.com/uber/kraken/origin/blobclient"
+	"github.com/uber/kraken/utils/closers"
 	"github.com/uber/kraken/utils/httputil"
 	"github.com/uber/kraken/utils/stringset"
 
@@ -1140,4 +1142,197 @@ func TestPollWrappedErrorExposesOriginErrors(t *testing.T) {
 	// Callers have to be able to classify the failure even though Poll adds
 	// the origin address to each error.
 	require.True(httputil.IsNetworkError(err))
+}
+
+// plainWriter implements only io.Writer: a failed download cannot be rewound.
+type plainWriter struct{ buf bytes.Buffer }
+
+func (w *plainWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
+
+// seekOnlyWriter can be rewound but not truncated: it stands for a destination
+// that implements io.Seeker only.
+type seekOnlyWriter struct {
+	buf []byte
+	off int
+}
+
+func (w *seekOnlyWriter) Write(p []byte) (int, error) {
+	if w.off > len(w.buf) {
+		w.buf = append(w.buf, make([]byte, w.off-len(w.buf))...)
+	}
+	w.buf = append(w.buf[:w.off], p...)
+	w.off += len(p)
+	return len(p), nil
+}
+
+func (w *seekOnlyWriter) Seek(offset int64, whence int) (int64, error) {
+	if whence == io.SeekCurrent {
+		if offset != 0 {
+			return 0, errors.New("unsupported current offset")
+		}
+		return int64(w.off), nil
+	}
+	if whence != io.SeekStart || offset < 0 || int(offset) > len(w.buf) {
+		return 0, errors.New("seek out of range")
+	}
+	w.off = int(offset)
+	return offset, nil
+}
+
+// brokenSeeker cannot even report its current offset, so it cannot be rewound.
+type brokenSeeker struct{ plainWriter }
+
+func (w *brokenSeeker) Seek(int64, int) (int64, error) { return 0, errors.New("seek failed") }
+
+// truncateFailWriter can seek but cannot truncate.
+type truncateFailWriter struct{ seekOnlyWriter }
+
+func (w *truncateFailWriter) Truncate(int64) error { return errors.New("truncate failed") }
+
+// seekBackFailWriter can report its offset but cannot seek back to the start.
+type seekBackFailWriter struct{ seekOnlyWriter }
+
+func (w *seekBackFailWriter) Seek(offset int64, whence int) (int64, error) {
+	if whence == io.SeekStart {
+		return 0, errors.New("seek back failed")
+	}
+	return w.seekOnlyWriter.Seek(offset, whence)
+}
+
+// downloadCase is one destination DownloadBlob writes to while the first origin
+// fails after writing part of the blob.
+type downloadCase struct {
+	name         string
+	newDst       func(*testing.T) (io.Writer, func() string)
+	secondCalled bool
+	wantErr      string
+	want         string
+}
+
+// TestClusterClientDownloadBlobDoesNotAppendPartialData verifies that a retry
+// on another origin replaces the data of a failed attempt instead of appending
+// to it, and that a destination that cannot be rewound stops the poll instead.
+func TestClusterClientDownloadBlobDoesNotAppendPartialData(t *testing.T) {
+	cases := []downloadCase{
+		{
+			name: "rewindable buffer",
+			newDst: func(*testing.T) (io.Writer, func() string) {
+				buf := &bytes.Buffer{}
+				buf.WriteString("prefix-")
+				return buf, buf.String
+			},
+			secondCalled: true,
+			want:         "prefix-blob data",
+		},
+		{
+			name: "seekable file",
+			newDst: func(t *testing.T) (io.Writer, func() string) {
+				f, err := os.CreateTemp(t.TempDir(), "download")
+				require.NoError(t, err)
+				t.Cleanup(func() { closers.Close(f) })
+				_, err = f.WriteString("prefix-")
+				require.NoError(t, err)
+				return f, func() string {
+					got, err := os.ReadFile(f.Name())
+					require.NoError(t, err)
+					return string(got)
+				}
+			},
+			secondCalled: true,
+			want:         "prefix-blob data",
+		},
+		{
+			name: "io.Discard",
+			newDst: func(*testing.T) (io.Writer, func() string) {
+				return io.Discard, func() string { return "" }
+			},
+			secondCalled: true,
+		},
+		{
+			name: "writer without rewind",
+			newDst: func(*testing.T) (io.Writer, func() string) {
+				w := &plainWriter{}
+				return w, func() string { return w.buf.String() }
+			},
+			wantErr: "network error",
+			want:    "partial-",
+		},
+		{
+			name: "seeker without truncate",
+			newDst: func(*testing.T) (io.Writer, func() string) {
+				w := &seekOnlyWriter{}
+				return w, func() string { return string(w.buf) }
+			},
+			secondCalled: true,
+			want:         "blob data",
+		},
+		{
+			name: "initial seek fails",
+			newDst: func(*testing.T) (io.Writer, func() string) {
+				w := &brokenSeeker{}
+				return w, func() string { return w.buf.String() }
+			},
+			wantErr: "network error",
+			want:    "partial-",
+		},
+		{
+			name: "seek back fails",
+			newDst: func(*testing.T) (io.Writer, func() string) {
+				w := &seekBackFailWriter{}
+				return w, func() string { return string(w.buf) }
+			},
+			wantErr: "rewind download destination: seek back failed",
+			want:    "partial-",
+		},
+		{
+			name: "truncate fails",
+			newDst: func(*testing.T) (io.Writer, func() string) {
+				w := &truncateFailWriter{}
+				return w, func() string { return string(w.buf) }
+			},
+			wantErr: "rewind download destination: truncate failed",
+			want:    "partial-",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			runDownloadCase(t, c)
+		})
+	}
+}
+
+func runDownloadCase(t *testing.T, c downloadCase) {
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	resolver := mockblobclient.NewMockClientResolver(ctrl)
+	client1 := mockblobclient.NewMockClient(ctrl)
+	client2 := mockblobclient.NewMockClient(ctrl)
+	dst, read := c.newDst(t)
+
+	resolver.EXPECT().Resolve(gomock.Any()).Return([]blobclient.Client{client1, client2}, nil)
+	client1.EXPECT().Addr().Return(_testOrigin1).AnyTimes()
+	client1.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+			_, err := dst.Write([]byte("partial-"))
+			require.NoError(t, err)
+			return httputil.NetworkError{}
+		})
+	if c.secondCalled {
+		client2.EXPECT().Addr().Return(_testOrigin2).AnyTimes()
+		client2.EXPECT().DownloadBlob(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, namespace string, d core.Digest, dst io.Writer) error {
+				_, err := dst.Write([]byte("blob data"))
+				return err
+			})
+	}
+
+	err := blobclient.NewClusterClient(resolver).DownloadBlob(
+		context.Background(), _testNamespace, core.DigestFixture(), dst)
+	if c.wantErr == "" {
+		require.NoError(t, err)
+	} else {
+		require.ErrorContains(t, err, c.wantErr)
+	}
+	require.Equal(t, c.want, read())
 }
