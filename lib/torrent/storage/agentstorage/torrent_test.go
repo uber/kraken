@@ -258,7 +258,10 @@ func (w *coordinatedWriter) Write(b []byte) (int, error) {
 func TestTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 	require := require.New(t)
 
-	blob := core.SizedBlobFixture(1, 1)
+	// Use two pieces to prevent triggering a blob cache move after piece
+	// completion, which would fail as a mocked store writer is used.
+	blob := core.SizedBlobFixture(2, 1)
+	piece := blob.Content[:1]
 
 	f, cleanup := store.NewMockFileReadWriter([]byte{})
 	defer cleanup()
@@ -278,18 +281,18 @@ func TestTorrentWritePieceConflictsDoNotBlock(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
+		require.NoError(tor.WritePiece(piecereader.NewBuffer(piece), 0))
 	}()
 
 	// Writing while another goroutine is mid-write should not block.
 	<-w.startWriting
-	require.Equal(errWritePieceConflict, tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
+	require.Equal(errWritePieceConflict, tor.WritePiece(piecereader.NewBuffer(piece), 0))
 	w.stopWriting <- true
 
 	<-done
 
 	// Duplicate write should detect piece is complete.
-	require.Equal(storage.ErrPieceComplete, tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
+	require.Equal(storage.ErrPieceComplete, tor.WritePiece(piecereader.NewBuffer(piece), 0))
 }
 
 func TestTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
@@ -303,7 +306,10 @@ func TestTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 	cads, cleanup := store.CADownloadStoreFixture()
 	defer cleanup()
 
-	blob := core.SizedBlobFixture(1, 1)
+	// Use two pieces to prevent triggering a blob cache move after piece
+	// completion, which would fail as a mocked store writer is used.
+	blob := core.SizedBlobFixture(2, 1)
+	piece := blob.Content[:1]
 
 	prepareStore(cads, blob.MetaInfo)
 
@@ -312,12 +318,12 @@ func TestTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 	gomock.InOrder(
 		// First write fails.
 		w.EXPECT().Seek(int64(0), 0).Return(int64(0), nil),
-		w.EXPECT().Write(blob.Content).Return(0, errors.New("first write error")),
+		w.EXPECT().Write(piece).Return(0, errors.New("first write error")),
 		w.EXPECT().Close().Return(nil),
 
 		// Second write succeeds.
 		w.EXPECT().Seek(int64(0), 0).Return(int64(0), nil),
-		w.EXPECT().Write(blob.Content).Return(len(blob.Content), nil),
+		w.EXPECT().Write(piece).Return(len(piece), nil),
 		w.EXPECT().Close().Return(nil),
 	)
 
@@ -326,8 +332,8 @@ func TestTorrentWritePieceFailuresRemoveDirtyStatus(t *testing.T) {
 
 	// After the first write fails, the dirty bit should be flipped to empty,
 	// allowing future writes to succeed.
-	require.Error(tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
-	require.NoError(tor.WritePiece(piecereader.NewBuffer(blob.Content), 0))
+	require.Error(tor.WritePiece(piecereader.NewBuffer(piece), 0))
+	require.NoError(tor.WritePiece(piecereader.NewBuffer(piece), 0))
 }
 
 func TestTorrentRestoreCompletedTorrent(t *testing.T) {
