@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
 	"github.com/uber/kraken/core"
+	"github.com/uber/kraken/lib/store/base"
 	"github.com/uber/kraken/lib/store/metadata"
 	"github.com/uber/kraken/utils/cache"
 	"github.com/uber/kraken/utils/closers"
@@ -1334,6 +1335,230 @@ func TestCAStore_ListCacheFiles(t *testing.T) {
 				require.True(t, fileMap[name], "Should include file: %s", name)
 			}
 		})
+	}
+}
+
+func TestCAStore_DeleteCacheFile(t *testing.T) {
+	newStore := func(t *testing.T, memEnabled bool) *CAStore {
+		config := CAStoreConfig{
+			UploadDir: t.TempDir(),
+			CacheDir:  t.TempDir(),
+			MemoryCache: MemoryCacheConfig{
+				Enabled:         memEnabled,
+				MaxSize:         1024 * 1024,
+				DrainWorkers:    1,
+				DrainMaxRetries: 3,
+				TTL:             time.Hour,
+			},
+		}
+		// The mock clock is never advanced, so drain workers never tick.
+		cas, err := newCAStore(config, tally.NoopScope, clock.NewMock())
+		require.NoError(t, err)
+		t.Cleanup(cas.Close)
+		return cas
+	}
+
+	// writeMem puts a new blob in the memory cache and drain queue only.
+	writeMem := func(t *testing.T, cas *CAStore) string {
+		blob := core.SizedBlobFixture(1024, 256)
+		name := blob.Digest.Hex()
+		require.NoError(t, cas.WriteBlobToCacheWithMetaInfo(
+			name, uint64(len(blob.Content)),
+			func(w FileReadWriter) error {
+				_, err := w.Write(blob.Content)
+				return err
+			}, 256))
+		return name
+	}
+	notExist := func(err error) bool { return os.IsNotExist(err) }
+
+	tests := []struct {
+		desc       string
+		memEnabled bool
+		// run sets up the store, calls DeleteCacheFile on target once, and
+		// returns target, blobs that must survive, and the delete error.
+		run        func(t *testing.T, cas *CAStore) (target string, others []string, err error)
+		wantErr    func(error) bool
+		wantOnDisk bool // whether target is still on disk after draining
+	}{
+		{
+			desc:       "memory-only entry is removed and not drained to disk",
+			memEnabled: true,
+			run: func(t *testing.T, cas *CAStore) (string, []string, error) {
+				name := writeMem(t, cas)
+				return name, nil, cas.DeleteCacheFile(name)
+			},
+		},
+		{
+			desc:       "deleting one blob does not cancel another's pending write",
+			memEnabled: true,
+			run: func(t *testing.T, cas *CAStore) (string, []string, error) {
+				a, b := writeMem(t, cas), writeMem(t, cas)
+				return a, []string{b}, cas.DeleteCacheFile(a)
+			},
+		},
+		{
+			desc:       "every queued write of the name is removed",
+			memEnabled: true,
+			run: func(t *testing.T, cas *CAStore) (string, []string, error) {
+				name := writeMem(t, cas)
+				// Same blob queued twice, as after a TTL eviction and re-fetch.
+				cas.addItemForDiskSync(&drainItem{entry: cas.memCache.Get(name)})
+				return name, nil, cas.DeleteCacheFile(name)
+			},
+		},
+		{
+			desc:       "write already picked up by a drain worker is cancelled",
+			memEnabled: true,
+			run: func(t *testing.T, cas *CAStore) (string, []string, error) {
+				name := writeMem(t, cas)
+				item := cas.dequeueNextDrainItem()
+				require.NotNil(t, item)
+				err := cas.DeleteCacheFile(name)
+				// The worker finishes its write after the delete returned.
+				cas.drainItem(item)
+				return name, nil, err
+			},
+		},
+		{
+			desc:       "disk-only entry is deleted",
+			memEnabled: true,
+			run: func(t *testing.T, cas *CAStore) (string, []string, error) {
+				blob := core.SizedBlobFixture(1024, 256)
+				name := blob.Digest.Hex()
+				require.NoError(t, cas.CreateCacheFile(name, bytes.NewReader(blob.Content)))
+				return name, nil, cas.DeleteCacheFile(name)
+			},
+		},
+		{
+			desc:       "persisted entry that is also in memory is refused",
+			memEnabled: true,
+			run: func(t *testing.T, cas *CAStore) (string, []string, error) {
+				blob := core.SizedBlobFixture(1024, 256)
+				name := blob.Digest.Hex()
+				require.NoError(t, cas.CreateCacheFile(name, bytes.NewReader(blob.Content)))
+				_, err := cas.SetCacheFileMetadata(name, metadata.NewPersist(true))
+				require.NoError(t, err)
+				require.True(t, cas.memCache.Add(&cache.MemoryEntry{Name: name, Data: blob.Content}))
+				return name, nil, cas.DeleteCacheFile(name)
+			},
+			wantErr:    func(err error) bool { return err == base.ErrFilePersisted },
+			wantOnDisk: true,
+		},
+		{
+			desc:       "missing entry still returns not-exist",
+			memEnabled: true,
+			run: func(t *testing.T, cas *CAStore) (string, []string, error) {
+				name := core.DigestFixture().Hex()
+				return name, nil, cas.DeleteCacheFile(name)
+			},
+			wantErr: notExist,
+		},
+		{
+			desc: "memory cache disabled",
+			run: func(t *testing.T, cas *CAStore) (string, []string, error) {
+				name := core.DigestFixture().Hex()
+				return name, nil, cas.DeleteCacheFile(name)
+			},
+			wantErr: notExist,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			require := require.New(t)
+			cas := newStore(t, tt.memEnabled)
+
+			target, others, err := tt.run(t, cas)
+
+			if tt.wantErr == nil {
+				require.NoError(err)
+			} else {
+				require.True(tt.wantErr(err), "got %v", err)
+			}
+			if cas.drain != nil {
+				for cas.drain.queue.Len() > 0 {
+					cas.drainNext()
+				}
+			}
+			_, err = cas.GetCacheFileStat(target)
+			files, lerr := cas.ListCacheFiles()
+			require.NoError(lerr)
+			if tt.wantOnDisk {
+				require.NoError(err)
+				require.Contains(files, target)
+			} else {
+				require.True(os.IsNotExist(err), "got %v", err)
+				require.NotContains(files, target)
+			}
+			for _, o := range others {
+				_, err := cas.GetCacheFileStat(o)
+				require.NoError(err)
+			}
+		})
+	}
+}
+
+// TestCAStore_DeleteCacheFile_ConcurrentWithWrites runs under -race. A deleted
+// blob must never come back, whichever way writes, deletes and drain workers
+// interleave.
+func TestCAStore_DeleteCacheFile_ConcurrentWithWrites(t *testing.T) {
+	require := require.New(t)
+	config := CAStoreConfig{
+		UploadDir: t.TempDir(),
+		CacheDir:  t.TempDir(),
+		MemoryCache: MemoryCacheConfig{
+			Enabled:         true,
+			MaxSize:         64 * 1024 * 1024,
+			DrainWorkers:    1,
+			DrainMaxRetries: 3,
+			TTL:             time.Hour,
+		},
+	}
+	cas, err := newCAStore(config, tally.NoopScope, clock.NewMock())
+	require.NoError(err)
+	defer cas.Close()
+
+	const n = 50
+	names := make([]string, n)
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				cas.drainNext()
+			}
+		}
+	}()
+	for i := range n {
+		blob := core.SizedBlobFixture(256, 64)
+		names[i] = blob.Digest.Hex()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			require.NoError(cas.WriteBlobToCacheWithMetaInfo(
+				names[i], uint64(len(blob.Content)),
+				func(w FileReadWriter) error {
+					_, err := w.Write(blob.Content)
+					return err
+				}, 64))
+			// Either the entry is still in memory or already on disk.
+			require.NoError(cas.DeleteCacheFile(names[i]))
+		}()
+	}
+	wg.Wait()
+	close(stop)
+	<-drained
+
+	files, err := cas.ListCacheFiles()
+	require.NoError(err)
+	for _, name := range names {
+		require.NotContains(files, name)
 	}
 }
 
