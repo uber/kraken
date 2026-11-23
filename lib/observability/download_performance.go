@@ -61,7 +61,8 @@ func init() {
 	_downloadThroughputBuckets = append(_downloadThroughputBuckets, tally.MustMakeLinearValueBuckets(300, 100, 7)...) // [300, 1000)
 }
 
-func getSizeTag(sizeBytes uint64) string {
+// GetSizeTag returns the size bucket label for sizeBytes.
+func GetSizeTag(sizeBytes uint64) string {
 	for i := len(_sizeBoundaries) - 1; i >= 0; i-- {
 		if sizeBytes >= _sizeBoundaries[i] {
 			return _sizeTags[i]
@@ -94,7 +95,7 @@ func EmitDownloadPerformance(stats tally.Scope, downloadType DownloadType, sizeB
 		return
 	}
 
-	sizeTag := getSizeTag(uint64(sizeBytes))
+	sizeTag := GetSizeTag(uint64(sizeBytes))
 	mbPerSecond := (float64(sizeBytes) / (float64(memsize.MB))) / seconds
 
 	switch downloadType {
