@@ -43,8 +43,9 @@ import (
 
 // Config defines Server configuration.
 type Config struct {
-	// How long a successful readiness check is valid for. If 0, disable caching successful readiness.
-	readinessCacheTTL time.Duration `yaml:"readiness_cache_ttl"`
+	// ReadinessCacheTTL is how long a successful readiness check is valid for.
+	// If 0, successful readiness checks are not cached.
+	ReadinessCacheTTL time.Duration `yaml:"readiness_cache_ttl"`
 }
 
 // Server defines the agent HTTP server.
@@ -56,7 +57,9 @@ type Server struct {
 	tags             tagclient.Client
 	ac               announceclient.Client
 	containerRuntime containerruntime.Factory
-	lastReady        time.Time
+
+	mu        sync.Mutex // Protects lastReady.
+	lastReady time.Time
 }
 
 // New creates a new Server.
@@ -223,8 +226,10 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) error {
-	if s.config.readinessCacheTTL != 0 {
-		rCacheValid := s.lastReady.Add(s.config.readinessCacheTTL).After(time.Now())
+	if s.config.ReadinessCacheTTL != 0 {
+		s.mu.Lock()
+		rCacheValid := s.lastReady.Add(s.config.ReadinessCacheTTL).After(time.Now())
+		s.mu.Unlock()
 		if rCacheValid {
 			if _, err := io.WriteString(w, "OK"); err != nil {
 				return fmt.Errorf("write response: %s", err)
@@ -262,7 +267,9 @@ func (s *Server) readinessCheckHandler(w http.ResponseWriter, r *http.Request) e
 		return handler.Errorf("agent not ready: %v", strings.Join(errMsgs, "\n")).Status(http.StatusServiceUnavailable)
 	}
 
+	s.mu.Lock()
 	s.lastReady = time.Now()
+	s.mu.Unlock()
 	if _, err := io.WriteString(w, "OK"); err != nil {
 		return fmt.Errorf("write response: %s", err)
 	}
