@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,6 +48,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally"
+	"gopkg.in/yaml.v2"
 )
 
 // failingResponseWriter always errors on Write, simulating a client that
@@ -455,7 +457,7 @@ func TestReadinessCheckHandlerCache(t *testing.T) {
 
 			tc.setupMocks(mocks)
 
-			s, addr := mocks.startServer(Config{readinessCacheTTL: tc.readinessCacheTTL})
+			s, addr := mocks.startServer(Config{ReadinessCacheTTL: tc.readinessCacheTTL})
 			_, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
 			if tc.wantFirstCallSuccess {
 				require.NoError(err)
@@ -465,7 +467,9 @@ func TestReadinessCheckHandlerCache(t *testing.T) {
 
 			if tc.waitInvalidation {
 				// To avoid using time.Sleep, we can rollback the server's lastReady variable to simulate cache invalidation.
+				s.mu.Lock()
 				s.lastReady = s.lastReady.Add(-1 * tc.readinessCacheTTL)
+				s.mu.Unlock()
 			}
 
 			_, err = httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
@@ -475,6 +479,63 @@ func TestReadinessCheckHandlerCache(t *testing.T) {
 				require.Error(err)
 			}
 		})
+	}
+}
+
+func TestReadinessCacheTTLFromYAML(t *testing.T) {
+	require := require.New(t)
+
+	var config Config
+	require.NoError(yaml.Unmarshal([]byte("readiness_cache_ttl: 10m"), &config))
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	// Dependencies are only ready for the first check, so the second readiness
+	// call succeeds only if the first result was cached.
+	testErr := errors.New("test-err")
+	mocks.sched.EXPECT().Probe().Return(nil)
+	mocks.tags.EXPECT().CheckReadiness().Return(nil)
+	mocks.ac.EXPECT().CheckReadiness().Return(nil)
+	mocks.sched.EXPECT().Probe().Return(testErr).AnyTimes()
+	mocks.tags.EXPECT().CheckReadiness().Return(testErr).AnyTimes()
+	mocks.ac.EXPECT().CheckReadiness().Return(testErr).AnyTimes()
+
+	_, addr := mocks.startServer(config)
+	for range 2 {
+		_, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
+		require.NoError(err)
+	}
+}
+
+func TestReadinessCheckHandlerConcurrentRequests(t *testing.T) {
+	require := require.New(t)
+
+	mocks, cleanup := newServerMocks(t)
+	defer cleanup()
+
+	mocks.sched.EXPECT().Probe().Return(nil).AnyTimes()
+	mocks.tags.EXPECT().CheckReadiness().Return(nil).AnyTimes()
+	mocks.ac.EXPECT().CheckReadiness().Return(nil).AnyTimes()
+
+	_, addr := mocks.startServer(Config{ReadinessCacheTTL: 10 * time.Minute})
+
+	// Concurrent checks read and update the cached readiness. Run with -race.
+	const n = 20
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := httputil.Get(fmt.Sprintf("http://%s/readiness", addr))
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(err)
 	}
 }
 
